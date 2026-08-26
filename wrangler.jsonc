@@ -11,8 +11,8 @@
 	},
 	"workers_dev": true,
 	"vars": {
-		"APP_NAME": "MyApp",
-		"APP_URL": "http://localhost:8788",
+		"APP_NAME": "Reader",
+		"APP_URL": "http://read.lsong.org",
 		"OIDC_ISSUER": "https://my.lsong.org",
 		"OIDC_CLIENT_ID": "app_PESXQlOpkqYmJq6ZlakO_9Wq"
 	},
