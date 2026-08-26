@@ -1,0 +1,66 @@
+@import "https://lsong.org/css/stylesheet.css";
+
+:root {
+  color-scheme: light dark;
+}
+
+.landing-features {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  scroll-margin-top: 32px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.landing-features article {
+  padding: 34px 30px 36px 0;
+}
+
+.landing-features article+article {
+  padding-left: 30px;
+  border-left: 1px solid var(--line);
+}
+
+.landing-features h2 {
+  margin: 16px 0 10px;
+  font-size: 18px;
+}
+
+.landing-features p,
+.landing-developer-link {
+  color: var(--muted);
+}
+
+.landing-features p {
+  margin: 0;
+  line-height: 1.65;
+}
+
+.landing-feature-mark {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .1em;
+}
+
+.landing-developer-link {
+  margin: 28px 0 64px;
+  font-size: 14px;
+}
+
+@media (max-width: 520px) {
+
+  .landing-features {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-features article,
+  .landing-features article+article {
+    padding: 26px 0;
+    border-left: 0;
+  }
+
+  .landing-features article+article {
+    border-top: 1px solid var(--line);
+  }
+}

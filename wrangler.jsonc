@@ -1,0 +1,29 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "cf-workers-template",
+	"main": "src/index.tsx",
+	"compatibility_date": "2026-07-29",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"assets": {
+		"directory": "./public"
+	},
+	"workers_dev": true,
+	"vars": {
+		"APP_NAME": "MyApp",
+		"APP_URL": "http://localhost:8788",
+		"OIDC_ISSUER": "https://my.idp.example.com",
+		"OIDC_CLIENT_ID": "your-client-id"
+	},
+	"ratelimits": [
+		{
+			"name": "AUTH_RATE_LIMITER",
+			"namespace_id": "70431",
+			"simple": {
+				"limit": 20,
+				"period": 60
+			}
+		}
+	]
+}

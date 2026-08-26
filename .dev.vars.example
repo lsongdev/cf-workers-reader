@@ -1,0 +1,5 @@
+APP_URL=http://localhost:8787
+OIDC_ISSUER=https://my.idp.example.com
+OIDC_CLIENT_ID=your-client-id
+OIDC_CLIENT_SECRET=replace-me
+SESSION_SECRET=replace-me
