@@ -45,3 +45,9 @@ export function safeReturnTo(value: string | null | undefined): string {
   if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) return "/";
   return value;
 }
+
+export function equalSecret(left: string, right: string): boolean {
+  const a = encoder.encode(left);
+  const b = encoder.encode(right);
+  return a.byteLength === b.byteLength && crypto.subtle.timingSafeEqual(a, b);
+}

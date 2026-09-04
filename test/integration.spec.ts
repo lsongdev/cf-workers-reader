@@ -1,14 +1,19 @@
-import { exports } from "cloudflare:workers";
+import { env, exports } from "cloudflare:workers";
 import { exportJWK, SignJWT } from "jose";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, afterEach, describe, expect, it, vi } from "vitest";
+
+beforeAll(async () => {
+  const schema = (env as unknown as { TEST_SCHEMA: string }).TEST_SCHEMA;
+  await env.DB.batch(schema.split(";").filter(sql => sql.trim()).map(sql => env.DB.prepare(sql)));
+});
 
 const origin = "http://localhost";
 
 async function call(path: string, init?: RequestInit): Promise<Response> {
-  return exports.default.fetch(new Request(`${origin}${path}`, init));
+  return exports.default.fetch(new Request(`${origin}${path}`, { redirect: "manual", ...init }));
 }
 
-async function oidcLogin() {
+async function oidcLogin(subject = "subject-testuser") {
   const started = await call("/login?return_to=%2F", { redirect: "manual" });
   expect(started.status).toBe(302);
   const authorization = new URL(started.headers.get("Location")!);
@@ -37,7 +42,7 @@ async function oidcLogin() {
     .setProtectedHeader({ alg: "ES256", kid: "test-key" })
     .setIssuer("https://my.idp.example.com")
     .setAudience("test-client-id")
-    .setSubject("subject-testuser")
+    .setSubject(subject)
     .setIssuedAt()
     .setExpirationTime("5m")
     .sign(pair.privateKey);
@@ -57,7 +62,7 @@ async function oidcLogin() {
     `/login/callback?code=test-code&state=${encodeURIComponent(state)}`,
     { headers: { Cookie: oidcCookie }, redirect: "manual" },
   );
-  return { started, authorization, completed, state };
+  return { started, authorization, completed, state, oidcCookie };
 }
 
 function sessionCookie(response: Response): string {
@@ -70,7 +75,7 @@ function sessionCookie(response: Response): string {
   throw new Error("Session cookie missing");
 }
 
-describe("template", () => {
+describe("reader", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("returns health check", async () => {
@@ -84,8 +89,8 @@ describe("template", () => {
     const response = await call("/");
     expect(response.status).toBe(200);
     const html = await response.text();
-    expect(html).toContain("Cloudflare Workers template");
-    expect(html).toContain("Sign in with OIDC");
+    expect(html).toContain("Follow what matters.");
+    expect(html).toContain("Sign in");
   });
 
   it("redirects anonymous user to OIDC provider", async () => {
@@ -112,9 +117,35 @@ describe("template", () => {
     expect(html).toContain("Welcome, Test User");
   });
 
-  it("prevents state replay attack", async () => {
+  it("rejects callbacks without the transaction cookie", async () => {
     const { state } = await oidcLogin();
     const replay = await call(`/login/callback?code=test-code&state=${encodeURIComponent(state)}`);
+    expect(replay.status).toBe(401);
+  });
+
+  it("revokes sessions on logout and requires CSRF", async () => {
+    const { completed } = await oidcLogin();
+    const cookie = sessionCookie(completed);
+    const html = await (await call("/", { headers: { Cookie: cookie } })).text();
+    const csrf = html.match(/name="csrf_token" value="([^"]+)"/)![1]!;
+    expect((await call("/logout", { method: "POST", headers: { Cookie: cookie }, body: new URLSearchParams({ csrf_token: "wrong" }) })).status).toBe(403);
+    expect((await call("/logout", { method: "POST", headers: { Cookie: cookie }, body: new URLSearchParams({ csrf_token: csrf }) })).status).toBe(302);
+    expect(await (await call("/", { headers: { Cookie: cookie } })).text()).not.toContain("Sign out");
+  });
+
+  it("keeps sessions tied to distinct OIDC subjects", async () => {
+    const first = sessionCookie((await oidcLogin("alice")).completed);
+    const second = sessionCookie((await oidcLogin("bob")).completed);
+    expect(first).not.toBe(second);
+    const users = await env.DB.prepare("SELECT id FROM users WHERE id IN ('alice', 'bob') ORDER BY id").all();
+    expect(users.results).toEqual([{ id: "alice" }, { id: "bob" }]);
+    const counts = await env.DB.prepare("SELECT COUNT(DISTINCT user_id) AS count FROM sessions WHERE user_id IN ('alice', 'bob')").first<{ count: number }>();
+    expect(counts?.count).toBe(2);
+  });
+
+  it("consumes OIDC state even when the original cookie is replayed", async () => {
+    const { state, oidcCookie } = await oidcLogin();
+    const replay = await call(`/login/callback?code=test-code&state=${encodeURIComponent(state)}`, { headers: { Cookie: oidcCookie } });
     expect(replay.status).toBe(401);
   });
 

@@ -15,7 +15,7 @@ export function Layout(props: {
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1" />
         <meta name="color-scheme" content="light dark" />
-        <meta name="description" content="A secure Cloudflare Workers starter with Hono and OIDC authentication." />
+        <meta name="description" content="Your personal RSS reader. Follow feeds and keep your reading progress in sync." />
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="manifest" href="/manifest.json" />
@@ -25,7 +25,7 @@ export function Layout(props: {
       <body class="layout-container">
         <header class="navbar" role="banner">
           <a class="navbar-brand" href="/" aria-label={`${props.title} home`}>
-            <img class="navbar-brand-mark" src="https://lsong.org/assets/web/icon.png" alt="" width="22" height="22" />
+            <img class="navbar-brand-mark" src="/icon-192.png" alt="" width="22" height="22" />
             <span>{props.title}</span>
           </a>
           <nav aria-label="Account navigation">

@@ -21,10 +21,15 @@ app.use("*", secureHeaders({
   xFrameOptions: "DENY",
 }));
 
+app.use("*", async (context, next) => {
+  context.header("Cache-Control", "no-store");
+  await next();
+});
+
 app.use("/login*", loginRateLimit);
 
 app.get("/health", (context) =>
-  context.json({ status: "ok", service: "cf-workers-template" }),
+  context.json({ status: "ok", service: "reader" }),
 );
 
 app.get("/", async (context) => {

@@ -1,5 +1,5 @@
 import { createLocalJWKSet, jwtVerify, type JSONWebKeySet } from "jose";
-import { base64Url, hmacSha256, now, pkceChallenge, randomToken, safeReturnTo, unsafeParsePayload } from "./crypto";
+import { base64Url, equalSecret, hmacSha256, now, pkceChallenge, randomToken, sha256, safeReturnTo, unsafeParsePayload } from "./crypto";
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 
@@ -16,6 +16,7 @@ export interface IdentityClaims {
 
 export async function beginOidcLogin(context: AppContext, returnToValue?: string | null): Promise<string> {
   const state = randomToken();
+  await context.env.DB.prepare("INSERT INTO oidc_transactions(state_hash, expires_at) VALUES (?, ?)").bind(await sha256(state), now() + TRANSACTION_TTL).run();
   const verifier = randomToken(48);
   const nonce = randomToken();
   const payload = base64Url(new TextEncoder().encode(
@@ -55,13 +56,16 @@ export async function completeOidcLogin(
   if (dot === -1) throw new Error("Invalid sign-in cookie.");
   const encoded = cookie.slice(0, dot);
   const sig = cookie.slice(dot + 1);
-  if ((await hmacSha256(encoded, context.env.OIDC_CLIENT_SECRET)) !== sig) throw new Error("Invalid sign-in cookie.");
+  if (!equalSecret(await hmacSha256(encoded, context.env.OIDC_CLIENT_SECRET), sig)) throw new Error("Invalid sign-in cookie.");
   const txn = unsafeParsePayload<{ s: string; v: string; n: string; r: string; e: number }>(encoded);
   if (!txn || txn.e < now()) throw new Error("The sign-in request expired.");
   if (txn.s !== state) throw new Error("State mismatch.");
+  const consumed = await context.env.DB.prepare("DELETE FROM oidc_transactions WHERE state_hash=? AND expires_at>? RETURNING state_hash").bind(await sha256(state), now()).first();
+  if (!consumed) throw new Error("The sign-in request expired or was already used.");
 
   const tokenResponse = await fetch(new URL("/oauth/token", context.env.OIDC_ISSUER), {
     method: "POST",
+    signal: AbortSignal.timeout(15000),
     headers: {
       Authorization: `Basic ${btoa(`${context.env.OIDC_CLIENT_ID}:${context.env.OIDC_CLIENT_SECRET}`)}`,
       "Content-Type": "application/x-www-form-urlencoded",
@@ -83,6 +87,7 @@ export async function completeOidcLogin(
 
   const jwksResponse = await fetch(new URL("/.well-known/jwks.json", context.env.OIDC_ISSUER), {
     headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(15000),
   });
   if (!jwksResponse.ok) throw new Error("Identity provider signing keys are unavailable.");
   const jwks = await jwksResponse.json<JSONWebKeySet>();

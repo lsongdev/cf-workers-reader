@@ -1,13 +1,13 @@
 {
-  "name": "cf-workers-template",
+  "name": "cf-workers-reader",
   "version": "0.1.0",
   "private": true,
-  "description": "Cloudflare Workers project template with Hono",
+  "description": "Multi-user RSS reader with OIDC and shared feed fetching",
   "type": "module",
   "scripts": {
     "check": "wrangler types && tsc --noEmit && tsc -p test/tsconfig.json --noEmit && vitest run",
     "deploy": "wrangler deploy",
-    "deploy:production": "wrangler d1 migrations apply myapp --remote && wrangler deploy",
+    "deploy:production": "wrangler d1 migrations apply reader-db --remote && wrangler deploy",
     "deploy:dry": "wrangler deploy --dry-run",
     "dev": "wrangler dev",
     "test": "vitest run",

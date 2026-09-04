@@ -1,29 +1,46 @@
 {
-	"$schema": "./node_modules/wrangler/config-schema.json",
-	"name": "reader",
-	"main": "src/index.tsx",
-	"compatibility_date": "2026-07-29",
-	"compatibility_flags": [
-		"nodejs_compat"
-	],
-	"assets": {
-		"directory": "./public"
-	},
-	"workers_dev": true,
-	"vars": {
-		"APP_NAME": "Reader",
-		"APP_URL": "http://read.lsong.org",
-		"OIDC_ISSUER": "https://my.lsong.org",
-		"OIDC_CLIENT_ID": "app_PESXQlOpkqYmJq6ZlakO_9Wq"
-	},
-	"ratelimits": [
-		{
-			"name": "AUTH_RATE_LIMITER",
-			"namespace_id": "70431",
-			"simple": {
-				"limit": 20,
-				"period": 60
-			}
-		}
-	]
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "reader",
+  "main": "src/index.tsx",
+  "compatibility_date": "2026-07-29",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "assets": {
+    "directory": "./public"
+  },
+  "workers_dev": true,
+  "vars": {
+    "APP_NAME": "Reader",
+    "APP_URL": "https://read.lsong.org",
+    "OIDC_ISSUER": "https://my.lsong.org",
+    "OIDC_CLIENT_ID": "app_PESXQlOpkqYmJq6ZlakO_9Wq"
+  },
+  "ratelimits": [
+    {
+      "name": "AUTH_RATE_LIMITER",
+      "namespace_id": "70431",
+      "simple": {
+        "limit": 20,
+        "period": 60
+      }
+    }
+  ],
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "reader-db",
+      "database_id": "387f83ed-954c-473f-b1a7-cc8146fe8109",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "routes": [
+    {
+      "pattern": "read.lsong.org",
+      "custom_domain": true
+    }
+  ]
 }
