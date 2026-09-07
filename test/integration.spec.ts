@@ -157,7 +157,7 @@ describe("reader", () => {
 });
 
 // Reader acceptance: two accounts share storage/fetches but never subscription or item state.
-import { refreshFeed, subscribe, nextInterval } from '../src/feeds';
+import { ensureScheduler, refreshFeed, runSchedulerHeartbeat, subscribe, nextInterval } from '../src/feeds';
 import { parseFeed, publicFeedUrl, boundedText } from '../src/feed-content';
 import { md5 } from '../src/crypto';
 const rss = `<?xml version="1.0"?><rss version="2.0"><channel><title>Shared blog</title><link>https://blog.lsong.org</link><item><guid>post-1</guid><title>First article</title><link>https://blog.lsong.org/first</link><description><![CDATA[<p>Hello <strong>reader</strong><script>alert(1)</script><a href="javascript:alert(1)" onclick="evil()">bad</a></p>]]></description><pubDate>Fri, 04 Sep 2026 00:00:00 GMT</pubDate></item></channel></rss>`;
@@ -236,6 +236,24 @@ describe('shared reader', () => {
     for (const url of ['http://127.0.0.1/rss','http://[::1]/','http://localhost/x','https://a:b@lsong.org/rss','file:///tmp/a','https://lsong.org/feed?token=secret']) expect(() => publicFeedUrl(url)).toThrow();
     await expect(parseFeed('<!DOCTYPE rss [<!ENTITY a "bad">]><rss/>','https://lsong.org/feed')).rejects.toThrow();
     await expect(boundedText(new Response('123456'),5)).rejects.toThrow();
+  });
+
+  it('keeps one idempotent delayed-queue scheduler chain', async () => {
+    await env.DB.prepare('UPDATE scheduler_state SET token=NULL, sequence=0, last_seen_at=0, lease_until=0 WHERE id=1').run();
+    const send = vi.fn(async (_body: unknown, _options?: unknown) => ({}));
+    const sendBatch = vi.fn(async (_messages: unknown) => ({}));
+    const schedulerEnv = { DB: env.DB, FETCH_QUEUE: { send, sendBatch } } as unknown as Env;
+    expect(await ensureScheduler(schedulerEnv)).toBe(true);
+    expect(await ensureScheduler(schedulerEnv)).toBe(false);
+    expect(send).toHaveBeenCalledTimes(1);
+    const first = send.mock.calls[0]![0] as { type:'schedule'; token:string; sequence:number };
+    expect(first).toMatchObject({ type:'schedule', sequence:0 });
+    await runSchedulerHeartbeat(schedulerEnv, first);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls[1]).toEqual([{ ...first, sequence:1 }, { delaySeconds:300 }]);
+    await runSchedulerHeartbeat(schedulerEnv, first);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(await env.DB.prepare('SELECT sequence, lease_until FROM scheduler_state WHERE id=1').first()).toEqual({ sequence:1, lease_until:0 });
   });
 });
 

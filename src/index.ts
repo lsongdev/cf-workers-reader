@@ -1,6 +1,6 @@
 import { fever } from "./fever";
 import { reader } from "./reader";
-import { scheduleFeeds, refreshFeed } from "./feeds";
+import { ensureScheduler, refreshFeed, runSchedulerHeartbeat, type ReaderQueueMessage } from "./feeds";
 import { Hono, type Context, type Next } from "hono";
 import { secureHeaders } from "hono/secure-headers";
 import { createSession, currentUser } from "./auth";
@@ -29,9 +29,10 @@ app.use("*", async (context, next) => {
 
 app.use("/login*", loginRateLimit);
 
-app.get("/health", (context) =>
-  context.json({ status: "ok", service: "reader" }),
-);
+app.get("/health", async (context) => {
+  await ensureScheduler(context.env);
+  return context.json({ status: "ok", service: "reader" });
+});
 
 app.get("/", (context) => asset(context, "/index.html"));
 app.get("/settings", (context) => asset(context, "/index.html"));
@@ -90,11 +91,16 @@ async function asset(context: Context<{ Bindings: Env }>, path: string): Promise
 
 export default {
   fetch: app.fetch,
-  async scheduled(_event, env) { await scheduleFeeds(env); },
   async queue(batch, env) {
     for (const message of batch.messages) {
-      await refreshFeed(env, message.body.id, message.body.token);
+      const body = message.body;
+      if ('type' in body && body.type === 'schedule') {
+        await runSchedulerHeartbeat(env, body);
+      } else {
+        // Accept pre-migration feed messages that may still be buffered at deploy.
+        await refreshFeed(env, body.id, body.token);
+      }
       message.ack();
     }
   },
-} satisfies ExportedHandler<Env, { id: number; token: string }>;
+} satisfies ExportedHandler<Env, ReaderQueueMessage | { id: number; token: string }>;

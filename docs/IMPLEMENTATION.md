@@ -6,7 +6,7 @@ Read in browser on 2026-09-04. The reference explicitly proposes an MVP with sha
 ## Milestones (commit and deploy each)
 
 1. **Foundation**: D1 schema, OIDC integration with my.lsong.org, revocable sessions, HTTPS origin, CSRF, test harness and deployed database.
-2. **Reader**: RSS/Atom discovery and parsing, public URL validation, shared feeds and aliases, scheduled queue fetching, conditional GET, adaptive intervals/backoff/leases, subscription management, unread/starred state and usable web UI. Verify multi-user isolation, duplicate subscriptions/items, parser and fetch failures.
+2. **Reader**: RSS/Atom discovery and parsing, public URL validation, shared feeds and aliases, delayed Queue heartbeat scheduling, conditional GET, adaptive intervals/backoff/leases, subscription management, unread/starred state and usable web UI. Verify multi-user isolation, duplicate subscriptions/items, parser and fetch failures.
 3. **Client API and acceptance**: Fever API with separately revocable per-user credentials; feeds/groups/items/read/star sync. Verify protocol requests, authorization and cross-user isolation. Production smoke and real OIDC browser flow, document endpoint/setup and limitations.
 
 ## Acceptance evidence
@@ -33,7 +33,7 @@ Do not mark complete until all three milestones are committed/deployed and their
 
 - Frontend is a standalone Preact + HTM application composed as browser-native ESM in `public/app.js`; Preact, hooks and HTM ESM modules are vendored with their licenses, so production has no runtime CDN dependency. Worker code exposes JSON under `/api` and serves the SPA shell separately.
 - Shared feed registry supports RSS 2.0 and Atom, HTML alternate-link discovery, URL aliases, GUID/link/fingerprint fallback, bounded 2 MB responses, dangerous XML construct rejection and sanitized article HTML.
-- Cron scans due feeds every five minutes, assigns one-use queue tokens, and Queue consumers claim five-minute leases. Fetches send ETag/Last-Modified validators, adapt between five minutes and twelve hours, and back off failures up to one day.
+- An idempotent delayed Queue heartbeat scans due feeds every five minutes, assigns one-use queue tokens, and Queue consumers claim five-minute feed leases. A D1 generation/sequence claim prevents duplicate heartbeat chains under at-least-once delivery, while `/health` restarts a chain after 15 minutes of silence. This replaced the planned Cron trigger because the account already had its five free-plan Cron slots in use. Fetches send ETag/Last-Modified validators, adapt between five minutes and twelve hours, and back off failures up to one day.
 - Web behavior covers URL subscription, folders/custom titles, unsubscribe, paged all/unread/starred views, individual read/unread/star state and ingestion-ID mark-all-read watermarks.
 - `pnpm check`: TypeScript and 12 Workers-runtime tests passed, including two-account state isolation, global feed/item dedupe, authorization, CSRF, HTML discovery, Atom/RSS parsing, sanitizer behavior, conditional 304 requests, fetch lease concurrency and error backoff.
 - Browser QA passed against a seeded local D1 account on desktop and a 390×844 viewport. Opening an article changed its unread count from one to zero and rendered its sanitized body.
@@ -44,3 +44,4 @@ Do not mark complete until all three milestones are committed/deployed and their
 - OIDC-authenticated client settings create, rotate and revoke one credential per user. Reader displays the generated password once. The Fever-required MD5 value is accepted at the protocol boundary and stored only as a SHA-256 digest; OIDC passwords are never used.
 - Workers-runtime integration coverage includes canonical MD5 vectors, bad credentials, catalog/group relationships, item pagination, unread/saved writes, feed mark-read, credential rotation/revocation and an empty catalog for a second user.
 - Client setup and the implemented protocol subset are documented in README.md. Fever XML output and Hot-link ranking are outside this MVP; JSON is the sync format used by supported clients.
+- The Worker and Queue producer/consumer deployed successfully. Migration 0005 persists the delayed Queue heartbeat generation and sequence, avoiding any dependency on an additional account-level Cron slot.

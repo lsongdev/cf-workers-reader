@@ -1,6 +1,10 @@
 import { now, randomToken } from './crypto';
 import { boundedText, discoverFeed, fetchPublic, parseFeed, publicFeedUrl, type ParsedFeed } from './feed-content';
 
+export type FeedQueueMessage = { type: 'feed'; id: number; token: string };
+export type SchedulerQueueMessage = { type: 'schedule'; token: string; sequence: number };
+export type ReaderQueueMessage = FeedQueueMessage | SchedulerQueueMessage;
+
 export interface Feed { id: number; url: string; title: string; site_url: string | null; etag: string | null; last_modified: string | null; fetch_interval: number; next_fetch_at: number; last_fetched_at: number | null; last_success_at: number | null; error_count: number; error: string | null; lease_token: string | null; fetching_until: number }
 
 async function storeItems(env: Env, id: number, parsed: ParsedFeed): Promise<number> {
@@ -75,11 +79,56 @@ export async function scheduleFeeds(env: Env): Promise<void> {
     env.DB.prepare('DELETE FROM oidc_transactions WHERE expires_at<=?').bind(now()),
   ]);
   const due = await env.DB.prepare('SELECT id FROM feeds WHERE next_fetch_at<=? AND fetching_until<? AND queued_at<? AND EXISTS(SELECT 1 FROM subscriptions WHERE feed_id=feeds.id) ORDER BY next_fetch_at LIMIT 100').bind(now(), now(), now() - 600).all<{ id: number }>();
-  const messages: Array<{ body: { id: number; token: string } }> = [];
+  const messages: Array<{ body: FeedQueueMessage }> = [];
   for (const feed of due.results) {
     const token = randomToken();
     const claimed = await env.DB.prepare('UPDATE feeds SET queue_token=?, queued_at=? WHERE id=? AND queued_at<? RETURNING id').bind(token, now(), feed.id, now() - 600).first();
-    if (claimed) messages.push({ body: { id: feed.id, token } });
+    if (claimed) messages.push({ body: { type: 'feed', id: feed.id, token } });
   }
   if (messages.length) await env.FETCH_QUEUE.sendBatch(messages);
+}
+
+/**
+ * Start a scheduler generation when the previous Queue heartbeat has been
+ * silent for 15 minutes. The D1 claim makes this safe to call from every
+ * health check without creating parallel heartbeat chains.
+ */
+export async function ensureScheduler(env: Env): Promise<boolean> {
+  const timestamp = now();
+  const token = randomToken();
+  const claimed = await env.DB.prepare(
+    'UPDATE scheduler_state SET token=?, sequence=0, last_seen_at=?, lease_until=0 WHERE id=1 AND (token IS NULL OR last_seen_at<?) RETURNING id',
+  ).bind(token, timestamp, timestamp - 900).first();
+  if (!claimed) return false;
+  try {
+    await env.FETCH_QUEUE.send({ type: 'schedule', token, sequence: 0 } satisfies SchedulerQueueMessage);
+    return true;
+  } catch (error) {
+    await env.DB.prepare('UPDATE scheduler_state SET token=NULL, last_seen_at=0, lease_until=0 WHERE id=1 AND token=?').bind(token).run();
+    throw error;
+  }
+}
+
+/** Process one heartbeat exactly once, then enqueue its successor. */
+export async function runSchedulerHeartbeat(env: Env, message: SchedulerQueueMessage): Promise<void> {
+  const timestamp = now();
+  const claimed = await env.DB.prepare(
+    'UPDATE scheduler_state SET lease_until=?, last_seen_at=? WHERE id=1 AND token=? AND sequence=? AND lease_until<? RETURNING id',
+  ).bind(timestamp + 900, timestamp, message.token, message.sequence, timestamp).first();
+  if (!claimed) return;
+  try {
+    await scheduleFeeds(env);
+    const next = message.sequence + 1;
+    await env.FETCH_QUEUE.send(
+      { type: 'schedule', token: message.token, sequence: next } satisfies SchedulerQueueMessage,
+      { delaySeconds: 300 },
+    );
+    const advanced = await env.DB.prepare(
+      'UPDATE scheduler_state SET sequence=?, last_seen_at=?, lease_until=0 WHERE id=1 AND token=? AND sequence=? RETURNING id',
+    ).bind(next, now(), message.token, message.sequence).first();
+    if (!advanced) throw new Error('Scheduler heartbeat state changed before it advanced.');
+  } catch (error) {
+    await env.DB.prepare('UPDATE scheduler_state SET lease_until=0 WHERE id=1 AND token=? AND sequence=?').bind(message.token, message.sequence).run();
+    throw error;
+  }
 }
