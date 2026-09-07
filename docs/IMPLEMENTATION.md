@@ -11,7 +11,7 @@ Read in browser on 2026-09-04. The reference explicitly proposes an MVP with sha
 
 ## Acceptance evidence
 
-Do not mark complete until all three milestones are committed/deployed and their behavior is verified. Local mock OIDC tests prove code behavior but do not prove the actual provider has accepted the HTTPS redirect URI. Production real sign-in remains a separate gate.
+Do not mark complete until all three milestones are committed/deployed and their behavior is verified. Local mock OIDC tests cover protocol failure cases; the final acceptance also includes a real production authorization and HTTPS callback through my.lsong.org.
 
 ## Current infrastructure
 
@@ -45,3 +45,6 @@ Do not mark complete until all three milestones are committed/deployed and their
 - Workers-runtime integration coverage includes canonical MD5 vectors, bad credentials, catalog/group relationships, item pagination, unread/saved writes, feed mark-read, credential rotation/revocation and an empty catalog for a second user.
 - Client setup and the implemented protocol subset are documented in README.md. Fever XML output and Hot-link ranking are outside this MVP; JSON is the sync format used by supported clients.
 - The Worker and Queue producer/consumer deployed successfully. Migration 0005 persists the delayed Queue heartbeat generation and sequence, avoiding any dependency on an additional account-level Cron slot.
+- Production OIDC acceptance passed in Chrome on 2026-09-07: MyCenter displayed Reader's `openid profile` consent, accepted the exact `https://read.lsong.org/login/callback` redirect, and Reader rendered the signed-in account with its subscriptions and articles.
+- Production smoke passed for the SPA and vendored Preact/HTM ESM, anonymous API rejection, Fever `auth: 0`, and the Queue heartbeat. D1 showed the initial heartbeat consumed and advanced from sequence 0 to 1 with its lease released.
+- `pnpm check` passed with 16 Workers-runtime tests. `pnpm audit --prod` reported no known vulnerabilities after updating Hono to 4.13.7. Final Worker version: `b5a9402b-91a2-4fa2-9856-3555b3a32f0e`.
