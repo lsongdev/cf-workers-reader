@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Atom Fixture</title>
+  <link rel="self" href="https://atom.lsong.org/feed.xml"/>
+  <link rel="alternate" href="https://atom.lsong.org/"/>
+  <entry>
+    <id>tag:atom.lsong.org,2026:one</id>
+    <title>Atom entry</title>
+    <link rel="alternate" href="/entries/one"/>
+    <author><name>Atom Author</name></author>
+    <updated>2026-09-04T04:00:00Z</updated>
+    <content type="html">&lt;p&gt;Atom body&lt;/p&gt;&lt;img src="https://images.lsong.org/atom.png" alt="Atom image"&gt;</content>
+  </entry>
+</feed>

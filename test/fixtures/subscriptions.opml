@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head><title>Fixture subscriptions</title></head>
+  <body>
+    <outline text="Engineering">
+      <outline text="Web">
+        <outline title="Atom Fixture" type="rss" xmlUrl="https://atom.lsong.org/feed.xml" htmlUrl="https://atom.lsong.org/"/>
+      </outline>
+      <outline text="RSS Fixture" xmlUrl="https://fixture.lsong.org/rss.xml"/>
+    </outline>
+    <outline title="Top level" xmlUrl="https://top.lsong.org/feed"/>
+  </body>
+</opml>

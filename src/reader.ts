@@ -1,14 +1,15 @@
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { csrfToken, currentUser, revokeSession, validCsrf } from './auth';
-import { subscribe } from './feeds';
+import { importSubscriptions, subscribe } from './feeds';
+import { parseOpml } from './feed-content';
 import { md5, randomToken, sha256 } from './crypto';
 import type { User } from './types';
 
 export const READ_SQL = 'COALESCE(st.read, CASE WHEN i.id<=s.read_before THEN 1 ELSE 0 END)';
 export const ITEM_JOIN = 'FROM items i JOIN subscriptions s ON s.feed_id=i.feed_id AND s.user_id=? LEFT JOIN item_states st ON st.item_id=i.id AND st.user_id=s.user_id';
 export const reader = new Hono<{ Bindings: Env; Variables: { user: User } }>();
-reader.use('*', bodyLimit({ maxSize: 65536 }));
+reader.use('*', bodyLimit({ maxSize: 600_000 }));
 reader.use('*', async (c, next) => {
   const user = await currentUser(c);
   if (!user) return c.json({ error: 'Sign in to continue.' }, 401);
@@ -41,6 +42,14 @@ reader.get('/subscriptions', async c => {
     FROM subscriptions s JOIN feeds f ON f.id=s.feed_id WHERE s.user_id=? ORDER BY s.folder, title`).bind(c.get('user').sub).all();
   return c.json(rows.results);
 });
+reader.get('/feed-directory', async c => {
+  const rows = await c.env.DB.prepare(`SELECT f.id,f.url,f.title,f.site_url,
+    EXISTS(SELECT 1 FROM subscriptions own WHERE own.feed_id=f.id AND own.user_id=?) AS subscribed,
+    (SELECT COUNT(*) FROM subscriptions all_subs WHERE all_subs.feed_id=f.id) AS subscribers,
+    (SELECT COUNT(*) FROM items i WHERE i.feed_id=f.id) AS items
+    FROM feeds f WHERE f.last_success_at IS NOT NULL ORDER BY subscribed DESC,subscribers DESC,f.title LIMIT 200`).bind(c.get('user').sub).all();
+  return c.json(rows.results);
+});
 reader.post('/subscriptions', async c => {
   const body = await c.req.json<{ url?: unknown; folder?: unknown }>();
   if (typeof body.url !== 'string' || body.url.length > 2048) return c.json({ error: 'Enter a feed or website URL.' }, 400);
@@ -50,6 +59,15 @@ reader.post('/subscriptions', async c => {
   catch (error) {
     console.error(JSON.stringify({ event: 'subscription_failed', message: error instanceof Error ? error.message : 'unknown' }));
     return c.json({ error: 'Could not subscribe. Use a public RSS/Atom URL or a website with a feed link (maximum 2 MB, no private credentials).' }, 400);
+  }
+});
+reader.post('/subscriptions/import', async c => {
+  const body = await c.req.json<{ opml?: unknown }>();
+  if (typeof body.opml !== 'string' || body.opml.length > 500_000) return c.json({ error: 'Choose an OPML file smaller than 500 KB.' }, 400);
+  try { return c.json(await importSubscriptions(c.env, c.get('user').sub, parseOpml(body.opml)), 201); }
+  catch (error) {
+    console.error(JSON.stringify({ event: 'opml_import_failed', message: error instanceof Error ? error.message : 'unknown' }));
+    return c.json({ error: error instanceof Error && /OPML|subscriptions/.test(error.message) ? error.message : 'Could not import this OPML file.' }, 400);
   }
 });
 reader.patch('/subscriptions/:id', async c => {

@@ -32,10 +32,10 @@ Do not mark complete until all three milestones are committed/deployed and their
 ### Milestone 2 validation
 
 - Frontend is a standalone Preact + HTM application composed as browser-native ESM in `public/app.js`; Preact, hooks and HTM ESM modules are vendored with their licenses, so production has no runtime CDN dependency. Worker code exposes JSON under `/api` and serves the SPA shell separately.
-- Shared feed registry supports RSS 2.0 and Atom, HTML alternate-link discovery, URL aliases, GUID/link/fingerprint fallback, bounded 2 MB responses, dangerous XML construct rejection and sanitized article HTML.
+- Shared feed registry supports RSS 2.0, Atom and OPML import, HTML alternate-link discovery, URL aliases, GUID/link/fingerprint fallback, bounded responses, dangerous XML construct rejection and sanitized article HTML including HTTPS images.
 - An idempotent delayed Queue heartbeat scans due feeds every five minutes, assigns one-use queue tokens, and Queue consumers claim five-minute feed leases. A D1 generation/sequence claim prevents duplicate heartbeat chains under at-least-once delivery, while `/health` restarts a chain after 15 minutes of silence. This replaced the planned Cron trigger because the account already had its five free-plan Cron slots in use. Fetches send ETag/Last-Modified validators, adapt between five minutes and twelve hours, and back off failures up to one day.
 - Web behavior covers URL subscription, folders/custom titles, unsubscribe, paged all/unread/starred views, individual read/unread/star state and ingestion-ID mark-all-read watermarks.
-- `pnpm check`: TypeScript and 12 Workers-runtime tests passed, including two-account state isolation, global feed/item dedupe, authorization, CSRF, HTML discovery, Atom/RSS parsing, sanitizer behavior, conditional 304 requests, fetch lease concurrency and error backoff.
+- `pnpm check`: TypeScript and Workers-runtime tests cover two-account state isolation, global feed/item dedupe, authorization, CSRF, HTML discovery, representative Atom/RSS/OPML fixtures, image sanitization, conditional 304 requests, fetch lease concurrency and error backoff.
 - Browser QA passed against a seeded local D1 account on desktop and a 390×844 viewport. Opening an article changed its unread count from one to zero and rendered its sanitized body.
 
 ### Milestone 3 validation

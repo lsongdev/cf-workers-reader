@@ -41,7 +41,7 @@ export async function fetchPublic(value: string, headers: HeadersInit = {}): Pro
   const aliases: string[] = [];
   for (let hop = 0; hop < 6; hop++) {
     aliases.push(url);
-    const response = await fetch(url, { headers: { 'User-Agent': 'LsongReader/1.0 (+https://read.lsong.org)', ...headers }, redirect: 'manual', signal: AbortSignal.timeout(15000) });
+    const response = await fetch(url, { headers: { 'User-Agent': 'LsongReader/1.0 (+https://read.lsong.org)', 'Accept': 'application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, text/html;q=0.5, */*;q=0.1', ...headers }, redirect: 'manual', signal: AbortSignal.timeout(15000) });
     if (![301, 302, 303, 307, 308].includes(response.status)) return { response, url, aliases };
     await response.body?.cancel();
     const location = response.headers.get('location');
@@ -52,13 +52,25 @@ export async function fetchPublic(value: string, headers: HeadersInit = {}): Pro
 }
 
 export async function sanitizeContent(content: string, base: string): Promise<string> {
-  const allowed = new Set(['p','br','a','strong','b','em','i','ul','ol','li','blockquote','pre','code','h1','h2','h3','h4','hr','div','span','table','thead','tbody','tr','th','td']);
+  const allowed = new Set(['p','br','a','strong','b','em','i','ul','ol','li','blockquote','pre','code','h1','h2','h3','h4','hr','div','span','table','thead','tbody','tr','th','td','figure','figcaption','img']);
   const dangerous = new Set(['script','style','iframe','object','embed','svg','math','template']);
   return new HTMLRewriter().on('*', { element(element) {
     if (!allowed.has(element.tagName)) { dangerous.has(element.tagName) ? element.remove() : element.removeAndKeepContent(); return; }
     const href = element.tagName === 'a' ? articleUrl(element.getAttribute('href') || '', base) : '';
+    const src = element.tagName === 'img' ? articleUrl(element.getAttribute('src') || '', base) : '';
+    const alt = element.tagName === 'img' ? (element.getAttribute('alt') || '').slice(0, 1000) : '';
+    const title = element.tagName === 'img' ? (element.getAttribute('title') || '').slice(0, 1000) : '';
     for (const [name] of Array.from(element.attributes)) if (name) element.removeAttribute(name);
     if (href) { element.setAttribute('href', href); element.setAttribute('rel', 'noopener noreferrer'); element.setAttribute('target', '_blank'); }
+    if (element.tagName === 'img') {
+      if (!src || !src.startsWith('https:')) { element.remove(); return; }
+      element.setAttribute('src', src);
+      if (alt) element.setAttribute('alt', alt);
+      if (title) element.setAttribute('title', title);
+      element.setAttribute('loading', 'lazy');
+      element.setAttribute('decoding', 'async');
+      element.setAttribute('referrerpolicy', 'no-referrer');
+    }
   } }).transform(new Response(content)).text();
 }
 
@@ -77,6 +89,31 @@ function link(value: unknown, base: string): string {
 }
 export interface ParsedItem { guid: string; url: string; title: string; content: string; author: string; published_at: number }
 export interface ParsedFeed { title: string; site_url: string; items: ParsedItem[] }
+export interface OpmlSubscription { url: string; title: string; folder: string }
+
+export function parseOpml(xml: string): OpmlSubscription[] {
+  const xmlMarkup = xml.replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '');
+  if (/<!DOCTYPE|<!ENTITY/i.test(xmlMarkup) || XMLValidator.validate(xml) !== true) throw new Error('Invalid OPML XML.');
+  const root = obj(new XMLParser({ ignoreAttributes: false, parseTagValue: false, trimValues: true }).parse(xml)).opml;
+  const body = obj(obj(root).body);
+  if (!Object.keys(body).length) throw new Error('This file is not OPML.');
+  const subscriptions: OpmlSubscription[] = [];
+  const visit = (values: unknown, folders: string[]) => {
+    for (const value of list(values)) {
+      const row = obj(value);
+      const url = text(row['@_xmlUrl'] ?? row['@_xmlurl']).trim();
+      const label = text(row['@_title'] ?? row['@_text']).trim();
+      if (url) {
+        subscriptions.push({ url: url.slice(0, 2048), title: label.slice(0, 500), folder: folders.join(' / ').slice(0, 100) });
+        if (subscriptions.length > 500) throw new Error('OPML contains more than 500 subscriptions.');
+      }
+      if (row.outline !== undefined) visit(row.outline, label ? [...folders, label] : folders);
+    }
+  };
+  visit(body.outline, []);
+  if (!subscriptions.length) throw new Error('No subscriptions were found in this OPML file.');
+  return subscriptions;
+}
 
 export async function parseFeed(xml: string, base: string): Promise<ParsedFeed> {
   const xmlMarkup = xml.replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '');

@@ -90,6 +90,7 @@ describe("reader", () => {
     expect(response.status).toBe(200);
     const html = await response.text();
     expect(response.headers.get("Content-Security-Policy")).toContain("default-src 'self'");
+    expect(response.headers.get("Content-Security-Policy")).toContain("img-src 'self' https:");
     expect(html).toContain('<script type="module" src="/app.js"></script>');
     const frontend = await (await call("/app.js")).text();
     expect(frontend).toContain("htm.bind(h)");
@@ -97,13 +98,14 @@ describe("reader", () => {
   });
 
   it("serves separate subscription, article-list and reading views", async () => {
-    for (const path of ["/", "/articles?filter=unread", "/article/1?return=%2Farticles%3Ffilter%3Dunread"]) {
+    for (const path of ["/", "/subscribe", "/articles?filter=unread", "/article/1?return=%2Farticles%3Ffilter%3Dunread"]) {
       const response = await call(path);
       expect(response.status).toBe(200);
       expect(await response.text()).toContain('<script type="module" src="/app.js"></script>');
     }
     const frontend = await (await call("/app.js")).text();
     expect(frontend).toContain("function FeedsView");
+    expect(frontend).toContain("function SubscribeView");
     expect(frontend).toContain("function ArticlesView");
     expect(frontend).toContain("function ArticleView");
     expect(frontend).not.toContain("reader-grid");
@@ -171,7 +173,7 @@ describe("reader", () => {
 
 // Reader acceptance: two accounts share storage/fetches but never subscription or item state.
 import { ensureScheduler, refreshFeed, runSchedulerHeartbeat, subscribe, nextInterval } from '../src/feeds';
-import { parseFeed, publicFeedUrl, boundedText } from '../src/feed-content';
+import { parseFeed, parseOpml, publicFeedUrl, boundedText } from '../src/feed-content';
 import { md5, sha256 } from '../src/crypto';
 const rss = `<?xml version="1.0"?><rss version="2.0"><channel><title>Shared blog</title><link>https://blog.lsong.org</link><item><guid>post-1</guid><title>First article</title><link>https://blog.lsong.org/first</link><description><![CDATA[<p>Hello <strong>reader</strong><script>alert(1)</script><a href="javascript:alert(1)" onclick="evil()">bad</a></p>]]></description><pubDate>Fri, 04 Sep 2026 00:00:00 GMT</pubDate></item></channel></rss>`;
 
@@ -219,6 +221,9 @@ describe('shared reader', () => {
     await env.DB.prepare("INSERT OR IGNORE INTO users(id) VALUES ('fetch-user')").run();
     const upstream = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(rss, { headers: { ETag: 'v1' } }));
     const id = await subscribe(env, 'fetch-user', 'https://fetch.lsong.org/feed.xml');
+    const initialHeaders = new Headers(upstream.mock.calls[0]?.[1]?.headers);
+    expect(initialHeaders.get('User-Agent')).toContain('LsongReader/1.0');
+    expect(initialHeaders.get('Accept')).toContain('application/rss+xml');
     await env.DB.prepare('UPDATE feeds SET next_fetch_at=0 WHERE id=?').bind(id).run();
     upstream.mockImplementation(async (_input, init) => {
       expect(new Headers(init?.headers).get('If-None-Match')).toBe('v1');
@@ -229,9 +234,10 @@ describe('shared reader', () => {
     const feed = await env.DB.prepare('SELECT fetch_interval, error_count FROM feeds WHERE id=?').bind(id).first();
     expect(feed).toMatchObject({ fetch_interval: 2700, error_count: 0 });
     await env.DB.prepare('UPDATE feeds SET next_fetch_at=0 WHERE id=?').bind(id).run();
-    upstream.mockImplementation(async () => new Response(rss));
+    upstream.mockImplementation(async () => new Response(rss.replace('Hello ', 'Updated ')));
     await refreshFeed(env,id);
     expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM items WHERE feed_id=?').bind(id).first()).toEqual({ n: 1 });
+    expect(await env.DB.prepare('SELECT content FROM items WHERE feed_id=?').bind(id).first<{ content: string }>()).toMatchObject({ content: expect.stringContaining('Updated') });
     await env.DB.prepare('UPDATE feeds SET next_fetch_at=0 WHERE id=?').bind(id).run();
     upstream.mockImplementation(async () => new Response('bad', { status: 503 }));
     await refreshFeed(env,id);
@@ -249,6 +255,48 @@ describe('shared reader', () => {
     for (const url of ['http://127.0.0.1/rss','http://[::1]/','http://localhost/x','https://a:b@lsong.org/rss','file:///tmp/a','https://lsong.org/feed?token=secret']) expect(() => publicFeedUrl(url)).toThrow();
     await expect(parseFeed('<!DOCTYPE rss [<!ENTITY a "bad">]><rss/>','https://lsong.org/feed')).rejects.toThrow();
     await expect(boundedText(new Response('123456'),5)).rejects.toThrow();
+  });
+
+  it('parses representative RSS, Atom, and nested OPML fixtures', async () => {
+    const fixtures = env as unknown as { TEST_RSS_FIXTURE: string; TEST_ATOM_FIXTURE: string; TEST_OPML_FIXTURE: string };
+    const rssFeed = await parseFeed(fixtures.TEST_RSS_FIXTURE, 'https://fixture.lsong.org/rss.xml');
+    expect(rssFeed).toMatchObject({ title: 'RSS Fixture', site_url: 'https://fixture.lsong.org/' });
+    expect(rssFeed.items[0]).toMatchObject({ title: 'Image article', url: 'https://fixture.lsong.org/posts/image', author: 'RSS Author' });
+    expect(rssFeed.items[0]?.content).toContain('<img src="https://images.lsong.org/comic.png" alt="Comic" title="Caption" loading="lazy" decoding="async" referrerpolicy="no-referrer">');
+    expect(rssFeed.items[0]?.content).toContain('<figcaption>Safe caption</figcaption>');
+    expect(rssFeed.items[0]?.content).not.toMatch(/onerror|script|bad\(\)/);
+
+    const atomFeed = await parseFeed(fixtures.TEST_ATOM_FIXTURE, 'https://atom.lsong.org/feed.xml');
+    expect(atomFeed).toMatchObject({ title: 'Atom Fixture', site_url: 'https://atom.lsong.org/' });
+    expect(atomFeed.items[0]).toMatchObject({ guid: 'tag:atom.lsong.org,2026:one', url: 'https://atom.lsong.org/entries/one', author: 'Atom Author' });
+    expect(atomFeed.items[0]?.content).toContain('https://images.lsong.org/atom.png');
+
+    expect(parseOpml(fixtures.TEST_OPML_FIXTURE)).toEqual([
+      { url: 'https://atom.lsong.org/feed.xml', title: 'Atom Fixture', folder: 'Engineering / Web' },
+      { url: 'https://fixture.lsong.org/rss.xml', title: 'RSS Fixture', folder: 'Engineering' },
+      { url: 'https://top.lsong.org/feed', title: 'Top level', folder: '' },
+    ]);
+    expect(() => parseOpml('<!DOCTYPE opml><opml><body/></opml>')).toThrow();
+  });
+
+  it('imports OPML in the background and exposes existing resources', async () => {
+    const alice = await account('reader-opml');
+    const fixture = (env as unknown as { TEST_OPML_FIXTURE: string }).TEST_OPML_FIXTURE;
+    const imported = await alice('/subscriptions/import', 'POST', { opml: fixture });
+    expect(imported.status).toBe(201);
+    expect(await imported.json()).toMatchObject({ imported: 3, skipped: 0, failed: 0, queued: 3 });
+    const subscriptions = await (await alice('/subscriptions')).json<Array<{ title: string; folder: string }>>();
+    expect(subscriptions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ title: 'Atom Fixture', folder: 'Engineering / Web' }),
+      expect.objectContaining({ title: 'RSS Fixture', folder: 'Engineering' }),
+      expect.objectContaining({ title: 'Top level', folder: '' }),
+    ]));
+    expect(await (await alice('/subscriptions/import', 'POST', { opml: fixture })).json()).toMatchObject({ imported: 0, skipped: 3, failed: 0 });
+    await env.DB.prepare("UPDATE feeds SET last_success_at=unixepoch() WHERE title='Atom Fixture'").run();
+    expect(await (await alice('/feed-directory')).json()).toEqual(expect.arrayContaining([expect.objectContaining({ title: 'Atom Fixture', subscribed: 1 })]));
+    const bob = await account('reader-directory');
+    expect(await (await bob('/feed-directory')).json()).toEqual(expect.arrayContaining([expect.objectContaining({ title: 'Atom Fixture', subscribed: 0 })]));
+    expect((await bob('/subscriptions', 'POST', { url: 'https://atom.lsong.org/feed.xml' })).status).toBe(201);
   });
 
   it('accepts HTML doctypes inside CDATA while still rejecting XML DTDs', async () => {

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>RSS Fixture</title>
+    <link>https://fixture.lsong.org/</link>
+    <item>
+      <guid isPermaLink="false">rss-one</guid>
+      <title>Image article</title>
+      <link>/posts/image</link>
+      <dc:creator>RSS Author</dc:creator>
+      <pubDate>Fri, 04 Sep 2026 04:00:00 GMT</pubDate>
+      <content:encoded><![CDATA[<figure><img src="https://images.lsong.org/comic.png" alt="Comic" title="Caption" onerror="bad()"><figcaption>Safe caption</figcaption></figure><script>bad()</script>]]></content:encoded>
+    </item>
+  </channel>
+</rss>

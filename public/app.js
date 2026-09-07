@@ -79,16 +79,33 @@ function ManageFeed({ feed, api, reload }) {
   return html`<details class="feed-menu"><summary aria-label=${`Manage ${feed.title}`}>•••</summary><form class="popover" onSubmit=${save}><strong>Manage subscription</strong><label>Title<input value=${title} onInput=${e => setFeedTitle(e.currentTarget.value)}/></label><label>Folder<input value=${folder} onInput=${e => setFolder(e.currentTarget.value)}/></label><div class="form-actions"><button disabled=${busy}>Save</button><button class="danger-button" type="button" disabled=${busy} onClick=${remove}>Unsubscribe</button></div></form></details>`;
 }
 
-function Subscribe({ api, reload, report }) {
+function AddressSubscription({ api, onComplete }) {
   const [busy, setBusy] = useState(false);
   const submit = async event => {
-    event.preventDefault(); setBusy(true); report('Finding your feed…');
+    event.preventDefault(); setBusy(true); onComplete('Finding your feed…');
     const form = event.currentTarget;
-    try { const data = new FormData(form); await api('/subscriptions', { method: 'POST', body: { url: data.get('url'), folder: data.get('folder') } }); form.reset(); await reload(); report('Subscription added.'); }
-    catch (error) { report(error.message, true); }
+    try { const data = new FormData(form); await api('/subscriptions', { method: 'POST', body: { url: data.get('url'), folder: data.get('folder') } }); form.reset(); onComplete('Subscription added.', false, true); }
+    catch (error) { onComplete(error.message, true); }
     finally { setBusy(false); }
   };
-  return html`<details class="add-panel"><summary class="button button-primary">+ Add subscription</summary><form onSubmit=${submit}><label>Feed or website URL<input type="url" name="url" placeholder="https://example.com/feed.xml" required/></label><label>Folder <span class="optional">Optional</span><input name="folder" maxlength="100"/></label><div class="form-actions"><button class="button-primary" disabled=${busy}>${busy ? 'Finding…' : 'Subscribe'}</button></div></form></details>`;
+  return html`<form class="subscribe-card" onSubmit=${submit}><p class="eyebrow">Add by address</p><h2>Feed or website</h2><p>Enter a public RSS, Atom, or website URL.</p><label>URL<input type="url" name="url" placeholder="https://example.com/feed.xml" required/></label><label>Folder <span class="optional">Optional</span><input name="folder" maxlength="100"/></label><div class="form-actions"><button class="button-primary" disabled=${busy}>${busy ? 'Finding…' : 'Subscribe'}</button></div></form>`;
+}
+
+function OpmlImport({ api, onComplete }) {
+  const [busy, setBusy] = useState(false);
+  const importOpml = async event => {
+    const input = event.currentTarget, file = input.files?.[0];
+    if (!file) return;
+    setBusy(true); onComplete('Importing subscriptions…');
+    try {
+      const result = await api('/subscriptions/import', { method: 'POST', body: { opml: await file.text() } });
+      const details = [`${result.imported} imported`, `${result.skipped} already present or over the limit`];
+      if (result.failed) details.push(`${result.failed} invalid`);
+      onComplete(`OPML import complete: ${details.join(', ')}. Feeds are updating in the background.`, false, true);
+    } catch (error) { onComplete(error.message, true); }
+    finally { input.value = ''; setBusy(false); }
+  };
+  return html`<section class="subscribe-card"><p class="eyebrow">Bring your library</p><h2>Import OPML</h2><p>Import folders, feed titles, and addresses from another reader.</p><label class="file-button">${busy ? 'Importing…' : 'Choose OPML file'}<input type="file" accept=".opml,.xml,text/xml,application/xml,text/x-opml" disabled=${busy} onChange=${importOpml}/></label><small class="muted">Maximum 500 subscriptions and 500 KB per file.</small></section>`;
 }
 
 function FeedsView({ auth }) {
@@ -100,7 +117,7 @@ function FeedsView({ auth }) {
   const unread = feeds?.reduce((total, feed) => total + feed.unread, 0) || 0;
   const groups = ['', ...new Set((feeds || []).map(feed => feed.folder).filter(Boolean))];
   return html`<${Shell} user=${auth.user} csrf=${auth.csrf}><section class="view feeds-view">
-    <${ViewHeader} eyebrow="Library" title="Subscriptions" description="Choose a collection or feed to browse its articles." actions=${html`<${Subscribe} api=${api} reload=${load} report=${report}/>`}/><${Notice} value=${message}/>
+    <${ViewHeader} eyebrow="Library" title="Subscriptions" description="Choose a collection or feed to browse its articles." actions=${html`<${Link} class="button button-primary" href="/subscribe">+ Add subscription<//>`}/><${Notice} value=${message}/>
     <nav class="collection-grid" aria-label="Article collections">
       <${Link} class="collection-card" href="/articles?filter=unread"><span class="collection-icon">◉</span><span><strong>Unread</strong><small>Articles waiting for you</small></span><b>${unread}</b><//>
       <${Link} class="collection-card" href="/articles?filter=all"><span class="collection-icon">▤</span><span><strong>All articles</strong><small>Your complete reading history</small></span><span class="arrow">→</span><//>
@@ -156,6 +173,22 @@ function ArticleView({ auth, id }) {
   </section><//>`;
 }
 
+function SubscribeView({ auth }) {
+  const api = useCallback((path, options = {}) => request(path, { ...options, csrf: auth.csrf }), [auth.csrf]);
+  const [directory, setDirectory] = useState(undefined), [message, setMessage] = useState(null), [busyId, setBusyId] = useState(0);
+  const load = useCallback(() => api('/feed-directory').then(setDirectory).catch(error => setMessage({ text: error.message, error: true })), [api]);
+  useEffect(() => { setTitle('Add subscription'); load(); }, []);
+  const complete = (text, error = false, reload = false) => { setMessage({ text, error }); if (reload) load(); };
+  const subscribeExisting = async feed => {
+    setBusyId(feed.id); setMessage({ text: `Subscribing to ${feed.title}…`, error: false });
+    try { await api('/subscriptions', { method: 'POST', body: { url: feed.url, folder: '' } }); complete('Subscription added.', false, true); }
+    catch (error) { complete(error.message, true); }
+    finally { setBusyId(0); }
+  };
+  const available = directory?.filter(feed => !feed.subscribed) || [];
+  return html`<${Shell} user=${auth.user} csrf=${auth.csrf}><section class="view subscribe-view"><${ViewHeader} eyebrow="Grow your library" title="Add subscription" description="Follow a new address, choose a feed Reader already knows, or bring an OPML collection." back=${{ href: '/', label: 'Subscriptions' }}/><${Notice} value=${message}/><div class="subscribe-options"><${AddressSubscription} api=${api} onComplete=${complete}/><${OpmlImport} api=${api} onComplete=${complete}/></div><section class="directory"><div class="section-heading"><div><p class="eyebrow">Existing resources</p><h2>Ready to subscribe</h2></div><span>${available.length} available</span></div>${directory === undefined ? html`<div class="loading-list">Loading resources…</div>` : !available.length ? html`<div class="empty-state compact"><span>✓</span><h2>You follow every available feed</h2><p>New shared resources will appear here automatically.</p></div>` : html`<div class="directory-grid">${available.map(feed => html`<article class="directory-card" key=${feed.id}><div><strong>${feed.title}</strong><small>${feed.url}</small><span>${feed.items} articles · ${feed.subscribers} subscriber${feed.subscribers === 1 ? '' : 's'}</span></div><button disabled=${Boolean(busyId)} onClick=${() => subscribeExisting(feed)}>${busyId === feed.id ? 'Adding…' : 'Subscribe'}</button></article>`)}</div>`}</section></section><//>`;
+}
+
 function Settings({ auth }) {
   const api = useCallback((path, options = {}) => request(path, { ...options, csrf: auth.csrf }), [auth.csrf]);
   const [credential, setCredential] = useState(undefined), [created, setCreated] = useState(null), [error, setError] = useState('');
@@ -175,6 +208,7 @@ function App() {
   if (!auth) return html`<${Landing}/>`;
   const path = route.split('?')[0];
   if (path === '/settings') return html`<${Settings} auth=${auth}/>`;
+  if (path === '/subscribe') return html`<${SubscribeView} auth=${auth}/>`;
   if (path === '/articles') return html`<${ArticlesView} auth=${auth}/>`;
   const article = path.match(/^\/article\/(\d+)$/);
   if (article) return html`<${ArticleView} auth=${auth} id=${Number(article[1])}/>`;
