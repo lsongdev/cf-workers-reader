@@ -47,7 +47,10 @@ reader.post('/subscriptions', async c => {
   const count = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM subscriptions WHERE user_id=?').bind(c.get('user').sub).first<{ n: number }>();
   if ((count?.n || 0) >= 500) return c.json({ error: 'The MVP supports up to 500 subscriptions per account.' }, 400);
   try { return c.json({ id: await subscribe(c.env, c.get('user').sub, body.url, typeof body.folder === 'string' ? body.folder : '') }, 201); }
-  catch { return c.json({ error: 'Could not subscribe. Use a public RSS/Atom URL or a website with a feed link (maximum 2 MB, no private credentials).' }, 400); }
+  catch (error) {
+    console.error(JSON.stringify({ event: 'subscription_failed', message: error instanceof Error ? error.message : 'unknown' }));
+    return c.json({ error: 'Could not subscribe. Use a public RSS/Atom URL or a website with a feed link (maximum 2 MB, no private credentials).' }, 400);
+  }
 });
 reader.patch('/subscriptions/:id', async c => {
   const body = await c.req.json<{ title?: unknown; folder?: unknown }>();
