@@ -129,7 +129,7 @@ describe("reader", () => {
 
     const me = await call("/api/me", { headers: { Cookie: cookie } });
     expect(me.status).toBe(200);
-    expect(await me.json()).toMatchObject({ user: { sub: "subject-testuser", name: "Test User" } });
+    expect(await me.json()).toMatchObject({ user: { sub: "subject-testuser", name: "Test User", username: "testuser" } });
   });
 
   it("rejects callbacks without the transaction cookie", async () => {
@@ -285,6 +285,7 @@ describe('Fever API v3', () => {
     await alice(`/subscriptions/${feed.id}`, 'PATCH', { title: feed.title, folder: 'Reading' });
     const issued = await (await alice('/client-credential', 'POST', {})).json<{ endpoint:string;username:string;password:string }>();
     expect(issued.endpoint).toBe('http://localhost/fever/');
+    expect(issued.username).toBe('testuser');
     const status = await (await alice('/client-credential')).json<{credential:Record<string,unknown>}>();
     expect(status.credential).not.toHaveProperty('password');
     expect(status.credential).not.toHaveProperty('key_hash');

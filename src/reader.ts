@@ -23,7 +23,8 @@ reader.get('/client-credential', async c => {
   return c.json({ credential: value || null, endpoint: `${c.env.APP_URL}/fever/` });
 });
 reader.post('/client-credential', async c => {
-  const username = `reader-${randomToken(6).toLowerCase()}@local`;
+  const username = c.get('user').username;
+  if (!username) return c.json({ error: 'Sign out and sign in again to refresh your OIDC username.' }, 409);
   const password = randomToken(24);
   const protocolKey = md5(`${username}:${password}`);
   await c.env.DB.prepare('INSERT INTO api_credentials(user_id,key_hash,username,created_at) VALUES (?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET key_hash=excluded.key_hash,username=excluded.username,created_at=excluded.created_at,last_used_at=NULL')

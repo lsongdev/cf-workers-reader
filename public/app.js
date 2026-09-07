@@ -48,8 +48,8 @@ function Shell({ user, csrf, children }) {
   return html`<div class="app-shell">
     <header class="navbar">
       <${Link} class="navbar-brand" href="/" aria-label="Reader home"><img src="/icon-192.png" width="24" height="24" alt=""/>Reader<//>
-      ${user && html`<nav aria-label="Primary navigation"><${Link} class=${reading ? 'nav-link active' : 'nav-link'} href="/">Subscriptions<//><${Link} class=${location.pathname === '/settings' ? 'nav-link active' : 'nav-link'} href="/settings">Client settings<//></nav>`}
-      <nav class="account-nav" aria-label="Account navigation">${user && html`<span class="address">${user.name || 'Reader'}</span><button class="button-link" onClick=${logout}>Sign out</button>`}</nav>
+      ${user && html`<nav aria-label="Primary navigation"><${Link} class=${reading ? 'nav-link active' : 'nav-link'} href="/">Subscriptions<//></nav>`}
+      <nav class="account-nav" aria-label="Account navigation">${user && html`<${Link} class=${location.pathname === '/settings' ? 'account-link active' : 'account-link'} href="/settings">${user.username ? `@${user.username}` : user.name || 'Account'}<//><button class="button-link" onClick=${logout}>Sign out</button>`}</nav>
     </header>
     <main>${children}</main>
     <footer><span>Reader</span><span>Part of lsong.org</span></footer>
@@ -150,8 +150,8 @@ function ArticleView({ auth, id }) {
   useEffect(() => { setTitle('Article'); load(); }, [id]);
   const update = async patch => { await api(`/items/${id}`, { method: 'PATCH', body: patch }); setItem(await api('/items/' + id)); };
   return html`<${Shell} user=${auth.user} csrf=${auth.csrf}><section class="reading-view">
-    <div class="reading-toolbar"><${Link} class="back-link" href=${back}>← Back to articles<//>${item && html`<div class="article-actions"><button aria-label=${item.starred ? 'Remove from saved' : 'Save article'} onClick=${() => update({ starred: !item.starred })}>${item.starred ? '★ Saved' : '☆ Save'}</button><button onClick=${() => update({ read: false })}>Mark unread</button>${item.url && html`<a class="button" href=${item.url} target="_blank" rel="noopener noreferrer">Open original ↗</a>`}</div>`}</div>
-    ${error ? html`<div class="alert error" role="alert">${error}</div>` : item === undefined ? html`<div class="loading-list">Loading article…</div>` : html`<article class="article"><header><p class="eyebrow">From your subscriptions</p><h1>${item.title}</h1><p class="article-meta">${[item.author, new Date(item.published_at * 1000).toLocaleString()].filter(Boolean).join(' · ')}</p></header><div class="article-content" dangerouslySetInnerHTML=${{ __html: item.content }}/></article>`}
+    <div class="reading-toolbar"><${Link} class="back-link" href=${back}>← Back to articles<//></div>
+    ${error ? html`<div class="alert error" role="alert">${error}</div>` : item === undefined ? html`<div class="loading-list">Loading article…</div>` : html`<article class="article"><header><p class="eyebrow">From your subscriptions</p><h1>${item.title}</h1><p class="article-meta">${[item.author, new Date(item.published_at * 1000).toLocaleString()].filter(Boolean).join(' · ')}</p><div class="article-actions"><button aria-label=${item.starred ? 'Remove from saved' : 'Save article'} onClick=${() => update({ starred: !item.starred })}>${item.starred ? '★ Saved' : '☆ Save'}</button><button onClick=${() => update({ read: false })}>Mark unread</button>${item.url && html`<a class="button" href=${item.url} target="_blank" rel="noopener noreferrer">Open original ↗</a>`}</div></header><div class="article-content" dangerouslySetInnerHTML=${{ __html: item.content }}/></article>`}
   </section><//>`;
 }
 

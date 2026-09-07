@@ -52,7 +52,7 @@ app.get("/login/callback", async (context) => {
   }
   try {
     const result = await completeOidcLogin(context, code, state);
-    await createSession(context, result.claims.sub, result.claims.displayName);
+    await createSession(context, result.claims.sub, result.claims.displayName, result.claims.preferredUsername);
     return context.redirect(result.returnTo);
   } catch (error) {
     console.error(JSON.stringify({ event: "oidc_login_failed", message: error instanceof Error ? error.message : "unknown" }));

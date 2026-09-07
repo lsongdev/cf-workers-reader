@@ -8,7 +8,7 @@ export default defineConfig({
       wrangler: { configPath: "./wrangler.jsonc" },
       miniflare: {
         bindings: {
-          TEST_SCHEMA: readFileSync("migrations/0001_reader.sql", "utf8") + readFileSync("migrations/0002_oidc_transactions.sql", "utf8") + readFileSync("migrations/0003_queue_tokens.sql", "utf8") + readFileSync("migrations/0004_fever.sql", "utf8") + readFileSync("migrations/0005_queue_scheduler.sql", "utf8"),
+          TEST_SCHEMA: readFileSync("migrations/0001_reader.sql", "utf8") + readFileSync("migrations/0002_oidc_transactions.sql", "utf8") + readFileSync("migrations/0003_queue_tokens.sql", "utf8") + readFileSync("migrations/0004_fever.sql", "utf8") + readFileSync("migrations/0005_queue_scheduler.sql", "utf8") + readFileSync("migrations/0006_oidc_username.sql", "utf8"),
           APP_URL: "http://localhost",
           OIDC_ISSUER: "https://my.idp.example.com",
           OIDC_CLIENT_ID: "test-client-id",

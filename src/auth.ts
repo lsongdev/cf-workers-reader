@@ -7,10 +7,10 @@ export const SESSION_COOKIE = "__Host-session";
 const SESSION_TTL = 30 * 24 * 60 * 60;
 
 
-export async function createSession<E extends { Bindings: Env }>(context: Context<E>, sub: string, name: string | null): Promise<void> {
+export async function createSession<E extends { Bindings: Env }>(context: Context<E>, sub: string, name: string | null, username: string): Promise<void> {
   const token = randomToken();
   await context.env.DB.batch([
-    context.env.DB.prepare("INSERT INTO users(id, name) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name").bind(sub, name),
+    context.env.DB.prepare("INSERT INTO users(id, name, username) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, username=excluded.username").bind(sub, name, username),
     context.env.DB.prepare("INSERT INTO sessions(token_hash, user_id, expires_at) VALUES (?, ?, ?)").bind(await sha256(token), sub, now() + SESSION_TTL),
   ]);
   setCookie(context, SESSION_COOKIE, token, {
@@ -21,7 +21,7 @@ export async function createSession<E extends { Bindings: Env }>(context: Contex
 export async function currentUser<E extends { Bindings: Env }>(context: Context<E>): Promise<User | null> {
   const cookie = getCookie(context, SESSION_COOKIE);
   if (!cookie) return null;
-  return context.env.DB.prepare("SELECT u.id AS sub, u.name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?")
+  return context.env.DB.prepare("SELECT u.id AS sub, u.name, u.username FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?")
     .bind(await sha256(cookie), now()).first<User>();
 }
 
