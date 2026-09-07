@@ -96,6 +96,19 @@ describe("reader", () => {
     expect(frontend).toContain("from '/vendor/preact.js'");
   });
 
+  it("serves separate subscription, article-list and reading views", async () => {
+    for (const path of ["/", "/articles?filter=unread", "/article/1?return=%2Farticles%3Ffilter%3Dunread"]) {
+      const response = await call(path);
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain('<script type="module" src="/app.js"></script>');
+    }
+    const frontend = await (await call("/app.js")).text();
+    expect(frontend).toContain("function FeedsView");
+    expect(frontend).toContain("function ArticlesView");
+    expect(frontend).toContain("function ArticleView");
+    expect(frontend).not.toContain("reader-grid");
+  });
+
   it("redirects anonymous user to OIDC provider", async () => {
     const response = await call("/login", { redirect: "manual" });
     expect(response.status).toBe(302);

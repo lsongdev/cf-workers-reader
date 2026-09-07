@@ -36,6 +36,8 @@ app.get("/health", async (context) => {
 
 app.get("/", (context) => asset(context, "/index.html"));
 app.get("/settings", (context) => asset(context, "/index.html"));
+app.get("/articles", (context) => asset(context, "/index.html"));
+app.get("/article/:id", (context) => asset(context, "/index.html"));
 
 app.get("/login", async (context) => {
   if (await currentUser(context)) return context.redirect("/");
