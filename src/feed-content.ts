@@ -142,7 +142,7 @@ export async function discoverFeed(value: string): Promise<{ parsed: ParsedFeed;
   let result = await fetchPublic(value);
   if (!result.response.ok) { await result.response.body?.cancel(); throw new Error(`Feed returned HTTP ${result.response.status}.`); }
   let body = await boundedText(result.response);
-  if (/text\/html/i.test(result.response.headers.get('content-type') || '') || /^\s*<!doctype html|<html[\s>]/i.test(body)) {
+  if (/text\/html/i.test(result.response.headers.get('content-type') || '') || /^\s*(?:<!doctype html[^>]*>\s*)?<html[\s>]/i.test(body)) {
     let alternate = '';
     await new HTMLRewriter().on('link', { element(e) {
       if (!alternate && (e.getAttribute('rel') || '').split(/\s+/).includes('alternate') && /application\/(rss|atom)\+xml/.test(e.getAttribute('type') || '')) alternate = e.getAttribute('href') || '';

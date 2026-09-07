@@ -173,7 +173,7 @@ describe("reader", () => {
 
 // Reader acceptance: two accounts share storage/fetches but never subscription or item state.
 import { ensureScheduler, refreshFeed, runSchedulerHeartbeat, subscribe, nextInterval } from '../src/feeds';
-import { parseFeed, parseOpml, publicFeedUrl, boundedText } from '../src/feed-content';
+import { parseFeed, parseOpml, publicFeedUrl, boundedText, discoverFeed } from '../src/feed-content';
 import { md5, sha256 } from '../src/crypto';
 const rss = `<?xml version="1.0"?><rss version="2.0"><channel><title>Shared blog</title><link>https://blog.lsong.org</link><item><guid>post-1</guid><title>First article</title><link>https://blog.lsong.org/first</link><description><![CDATA[<p>Hello <strong>reader</strong><script>alert(1)</script><a href="javascript:alert(1)" onclick="evil()">bad</a></p>]]></description><pubDate>Fri, 04 Sep 2026 00:00:00 GMT</pubDate></item></channel></rss>`;
 
@@ -300,9 +300,13 @@ describe('shared reader', () => {
   });
 
   it('accepts HTML doctypes inside CDATA while still rejecting XML DTDs', async () => {
-    const wrapped = await parseFeed('<?xml version="1.0"?><rss><channel><title>Wrapped</title><item><guid>w</guid><title>Wrapped article</title><description><![CDATA[<!DOCTYPE html><html><body><p>Kept text</p><script>drop()</script></body></html>]]></description></item></channel></rss>', 'https://wrapped.lsong.org/feed');
+    const wrappedXml = '<?xml version="1.0"?><rss><channel><title>Wrapped</title><item><guid>w</guid><title>Wrapped article</title><description><![CDATA[<!DOCTYPE html><html><body><p>Kept text</p><script>drop()</script></body></html>]]></description></item></channel></rss>';
+    const wrapped = await parseFeed(wrappedXml, 'https://wrapped.lsong.org/feed');
     expect(wrapped.items[0]?.content).toContain('<p>Kept text</p>');
     expect(wrapped.items[0]?.content).not.toContain('drop()');
+    const upstream = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(wrappedXml, { headers: { 'Content-Type': 'application/rss+xml' } }));
+    expect((await discoverFeed('https://wrapped.lsong.org/feed')).parsed.title).toBe('Wrapped');
+    expect(upstream).toHaveBeenCalledTimes(1);
     await expect(parseFeed('<!DOCTYPE rss><rss><channel><title>Unsafe</title></channel></rss>', 'https://wrapped.lsong.org/feed')).rejects.toThrow();
   });
 
