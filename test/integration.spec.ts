@@ -217,6 +217,25 @@ describe('shared reader', () => {
     expect((await call('/api/items')).status).toBe(401);
   });
 
+  it('sorts article pages by publication date with a stable cursor', async () => {
+    const alice = await account('reader-sorting');
+    const feed = await env.DB.prepare("INSERT INTO feeds(url,title,last_success_at) VALUES ('https://sorting.lsong.org/feed','Sorting',unixepoch()) RETURNING id").first<{ id: number }>();
+    await env.DB.prepare('INSERT INTO subscriptions(user_id,feed_id) VALUES (?,?)').bind('reader-sorting', feed!.id).run();
+    const base = 1_700_000_000;
+    await env.DB.batch(Array.from({ length: 52 }, (_, index) => env.DB.prepare('INSERT INTO items(feed_id,guid,title,published_at) VALUES (?,?,?,?)')
+      .bind(feed!.id, `sort-${index}`, `Article ${index}`, base + Math.floor(index / 2))));
+    const first = await (await alice(`/items?filter=all&feed=${feed!.id}`)).json<Array<{ id: number; published_at: number }>>();
+    expect(first).toHaveLength(50);
+    for (let index = 1; index < first.length; index++) {
+      const previous = first[index - 1]!, current = first[index]!;
+      expect(previous.published_at > current.published_at || (previous.published_at === current.published_at && previous.id > current.id)).toBe(true);
+    }
+    const cursor = first.at(-1)!;
+    const second = await (await alice(`/items?filter=all&feed=${feed!.id}&before_date=${cursor.published_at}&before_id=${cursor.id}`)).json<Array<{ id: number }>>();
+    expect(second).toHaveLength(2);
+    expect(new Set([...first, ...second].map(item => item.id)).size).toBe(52);
+  });
+
   it('uses conditional fetches, leases, item dedupe and failure backoff', async () => {
     await env.DB.prepare("INSERT OR IGNORE INTO users(id) VALUES ('fetch-user')").run();
     const upstream = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(rss, { headers: { ETag: 'v1' } }));

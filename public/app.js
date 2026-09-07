@@ -44,12 +44,10 @@ function useRoute() {
 
 function Shell({ user, csrf, children }) {
   const logout = async () => { await request('/logout', { method: 'POST', csrf }); location.href = '/'; };
-  const reading = location.pathname === '/' || location.pathname === '/articles' || location.pathname.startsWith('/article/');
   return html`<div class="app-shell">
     <header class="navbar">
       <${Link} class="navbar-brand" href="/" aria-label="Reader home"><img src="/icon-192.png" width="24" height="24" alt=""/>Reader<//>
-      ${user && html`<nav aria-label="Primary navigation"><${Link} class=${reading ? 'nav-link active' : 'nav-link'} href="/">Subscriptions<//></nav>`}
-      <nav class="account-nav" aria-label="Account navigation">${user && html`<${Link} class=${location.pathname === '/settings' ? 'account-link active' : 'account-link'} href="/settings">${user.username ? `@${user.username}` : user.name || 'Account'}<//><button class="button-link" onClick=${logout}>Sign out</button>`}</nav>
+      <nav class="account-nav" aria-label="Account navigation">${user && html`<${Link} class=${location.pathname === '/settings' ? 'account-link active' : 'account-link'} href="/settings">${user.name || (user.username ? `@${user.username}` : 'Account')}<//><button class="button-link" onClick=${logout}>Sign out</button>`}</nav>
     </header>
     <main>${children}</main>
     <footer><span>Reader</span><span>Part of lsong.org</span></footer>
@@ -138,13 +136,13 @@ function FilterTabs({ filter, feed }) {
 function ArticlesView({ auth }) {
   const params = new URLSearchParams(location.search), filter = ['all', 'starred'].includes(params.get('filter')) ? params.get('filter') : 'unread', feed = Number(params.get('feed')) || 0;
   const api = useCallback((path, options = {}) => request(path, { ...options, csrf: auth.csrf }), [auth.csrf]);
-  const [feeds, setFeeds] = useState([]), [items, setItems] = useState(undefined), [cursor, setCursor] = useState(0), [message, setMessage] = useState(null);
+  const [feeds, setFeeds] = useState([]), [items, setItems] = useState(undefined), [cursor, setCursor] = useState(null), [message, setMessage] = useState(null);
   const selected = feeds.find(value => value.id === feed), heading = selected?.title || (filter === 'starred' ? 'Saved articles' : filter === 'all' ? 'All articles' : 'Unread articles');
   const loadItems = useCallback(async append => {
-    try { const rows = await api(`/items?filter=${filter}&feed=${feed}${append && cursor ? `&before=${cursor}` : ''}`); setItems(old => append ? [...(old || []), ...rows] : rows); setCursor(rows.at(-1)?.id || 0); }
+    try { const rows = await api(`/items?filter=${filter}&feed=${feed}${append && cursor ? `&before_date=${cursor.published_at}&before_id=${cursor.id}` : ''}`); setItems(old => append ? [...(old || []), ...rows] : rows); setCursor(rows.length ? { published_at: rows.at(-1).published_at, id: rows.at(-1).id } : null); }
     catch (error) { setMessage({ text: error.message, error: true }); }
   }, [api, filter, feed, cursor]);
-  useEffect(() => { setTitle(heading); api('/subscriptions').then(setFeeds); setCursor(0); loadItems(false); }, [filter, feed]);
+  useEffect(() => { setTitle(heading); api('/subscriptions').then(setFeeds); setCursor(null); loadItems(false); }, [filter, feed]);
   useEffect(() => { if (selected) setTitle(selected.title); }, [selected?.title]);
   const markAll = async () => { await api('/mark-read', { method: 'POST', body: { feed } }); await loadItems(false); setMessage({ text: 'Marked all current articles as read.', error: false }); };
   const returnTo = location.pathname + location.search;

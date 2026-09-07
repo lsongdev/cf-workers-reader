@@ -83,10 +83,11 @@ reader.delete('/subscriptions/:id', async c => {
 reader.get('/items', async c => {
   const filter = c.req.query('filter');
   const feed = Number(c.req.query('feed')) || 0;
-  const before = Number(c.req.query('before')) || Number.MAX_SAFE_INTEGER;
+  const beforeDate = Number(c.req.query('before_date')) || Number.MAX_SAFE_INTEGER;
+  const beforeId = Number(c.req.query('before_id')) || Number.MAX_SAFE_INTEGER;
   const rows = await c.env.DB.prepare(`SELECT i.id, i.feed_id, i.title, i.url, i.author, i.published_at, ${READ_SQL} AS read, COALESCE(st.starred,0) AS starred, f.title AS feed_title
-    ${ITEM_JOIN} JOIN feeds f ON f.id=i.feed_id WHERE i.id<? AND (?=0 OR i.feed_id=?) ${filter === 'unread' ? `AND ${READ_SQL}=0` : filter === 'starred' ? 'AND st.starred=1' : ''} ORDER BY i.id DESC LIMIT 50`)
-    .bind(c.get('user').sub, before, feed, feed).all();
+    ${ITEM_JOIN} JOIN feeds f ON f.id=i.feed_id WHERE (i.published_at<? OR (i.published_at=? AND i.id<?)) AND (?=0 OR i.feed_id=?) ${filter === 'unread' ? `AND ${READ_SQL}=0` : filter === 'starred' ? 'AND st.starred=1' : ''} ORDER BY i.published_at DESC,i.id DESC LIMIT 50`)
+    .bind(c.get('user').sub, beforeDate, beforeDate, beforeId, feed, feed).all();
   return c.json(rows.results);
 });
 reader.get('/items/:id', async c => {
