@@ -53,8 +53,9 @@ export async function fetchPublic(value: string, headers: HeadersInit = {}): Pro
 
 export async function sanitizeContent(content: string, base: string): Promise<string> {
   const allowed = new Set(['p','br','a','strong','b','em','i','ul','ol','li','blockquote','pre','code','h1','h2','h3','h4','hr','div','span','table','thead','tbody','tr','th','td']);
+  const dangerous = new Set(['script','style','iframe','object','embed','svg','math','template']);
   return new HTMLRewriter().on('*', { element(element) {
-    if (!allowed.has(element.tagName)) { element.remove(); return; }
+    if (!allowed.has(element.tagName)) { dangerous.has(element.tagName) ? element.remove() : element.removeAndKeepContent(); return; }
     const href = element.tagName === 'a' ? articleUrl(element.getAttribute('href') || '', base) : '';
     for (const [name] of Array.from(element.attributes)) if (name) element.removeAttribute(name);
     if (href) { element.setAttribute('href', href); element.setAttribute('rel', 'noopener noreferrer'); element.setAttribute('target', '_blank'); }
@@ -78,7 +79,8 @@ export interface ParsedItem { guid: string; url: string; title: string; content:
 export interface ParsedFeed { title: string; site_url: string; items: ParsedItem[] }
 
 export async function parseFeed(xml: string, base: string): Promise<ParsedFeed> {
-  if (/<!DOCTYPE|<!ENTITY/i.test(xml) || XMLValidator.validate(xml) !== true) throw new Error('Invalid or unsupported feed XML.');
+  const xmlMarkup = xml.replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '');
+  if (/<!DOCTYPE|<!ENTITY/i.test(xmlMarkup) || XMLValidator.validate(xml) !== true) throw new Error('Invalid or unsupported feed XML.');
   const parsed = obj(new XMLParser({ ignoreAttributes: false, removeNSPrefix: true, parseTagValue: false, trimValues: true }).parse(xml));
   const atom = parsed.feed !== undefined;
   const channel = obj(atom ? parsed.feed : obj(parsed.rss).channel ?? obj(parsed.RDF).channel);

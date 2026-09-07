@@ -251,6 +251,13 @@ describe('shared reader', () => {
     await expect(boundedText(new Response('123456'),5)).rejects.toThrow();
   });
 
+  it('accepts HTML doctypes inside CDATA while still rejecting XML DTDs', async () => {
+    const wrapped = await parseFeed('<?xml version="1.0"?><rss><channel><title>Wrapped</title><item><guid>w</guid><title>Wrapped article</title><description><![CDATA[<!DOCTYPE html><html><body><p>Kept text</p><script>drop()</script></body></html>]]></description></item></channel></rss>', 'https://wrapped.lsong.org/feed');
+    expect(wrapped.items[0]?.content).toContain('<p>Kept text</p>');
+    expect(wrapped.items[0]?.content).not.toContain('drop()');
+    await expect(parseFeed('<!DOCTYPE rss><rss><channel><title>Unsafe</title></channel></rss>', 'https://wrapped.lsong.org/feed')).rejects.toThrow();
+  });
+
   it('keeps one idempotent delayed-queue scheduler chain', async () => {
     await env.DB.prepare('UPDATE scheduler_state SET token=NULL, sequence=0, last_seen_at=0, lease_until=0 WHERE id=1').run();
     const send = vi.fn(async (_body: unknown, _options?: unknown) => ({}));
