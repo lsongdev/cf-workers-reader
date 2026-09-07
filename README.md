@@ -28,7 +28,7 @@ The frontend is a static browser-native ESM application in `public/app.js`, rend
 
 Open **Add subscription** to follow an RSS/Atom or website URL, choose a feed already present in Reader's shared registry, or import an OPML file. OPML folders and custom feed titles are preserved while new feeds are fetched through the Queue in the background.
 
-The Worker owns OIDC, per-user sessions/state and a shared feed registry in D1. An idempotent delayed Queue heartbeat schedules due feeds every five minutes onto `reader-fetch`; a health request restarts it if it has been silent for 15 minutes. Queue consumers use one-use queue tokens and leases, conditional HTTP requests, adaptive polling and backoff. The MVP accepts public RSS/Atom feeds and websites with a feed `<link>`; credentialed private feeds are intentionally excluded because their content cannot be globally deduplicated safely.
+The Worker owns OIDC, per-user sessions/state and a shared feed registry in D1. An idempotent delayed Queue heartbeat schedules due feeds every five minutes onto `reader-fetch`; a health request restarts it if it has been silent for 15 minutes. Queue consumers use one-use queue tokens and leases, conditional HTTP requests, adaptive polling and backoff. The MVP accepts public RSS/Atom feeds up to 5 MB and websites with a feed `<link>`; credentialed private feeds are intentionally excluded because their content cannot be globally deduplicated safely.
 
 ## Fever clients
 

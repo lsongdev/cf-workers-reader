@@ -19,7 +19,7 @@ export function articleUrl(value: string, base: string): string {
   catch { return ''; }
 }
 
-export async function boundedText(response: Response, limit = 2_000_000): Promise<string> {
+export async function boundedText(response: Response, limit = 5_000_000): Promise<string> {
   const reader = response.body?.getReader();
   if (!reader) return '';
   const decoder = new TextDecoder();

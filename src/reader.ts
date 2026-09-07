@@ -58,7 +58,7 @@ reader.post('/subscriptions', async c => {
   try { return c.json({ id: await subscribe(c.env, c.get('user').sub, body.url, typeof body.folder === 'string' ? body.folder : '') }, 201); }
   catch (error) {
     console.error(JSON.stringify({ event: 'subscription_failed', message: error instanceof Error ? error.message : 'unknown' }));
-    return c.json({ error: 'Could not subscribe. Use a public RSS/Atom URL or a website with a feed link (maximum 2 MB, no private credentials).' }, 400);
+    return c.json({ error: 'Could not subscribe. Use a public RSS/Atom URL or a website with a feed link (maximum 5 MB, no private credentials).' }, 400);
   }
 });
 reader.post('/subscriptions/import', async c => {

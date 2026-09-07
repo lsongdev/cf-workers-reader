@@ -254,6 +254,7 @@ describe('shared reader', () => {
     expect(atom.items[0]?.url).toBe('https://atom.lsong.org/a');
     for (const url of ['http://127.0.0.1/rss','http://[::1]/','http://localhost/x','https://a:b@lsong.org/rss','file:///tmp/a','https://lsong.org/feed?token=secret']) expect(() => publicFeedUrl(url)).toThrow();
     await expect(parseFeed('<!DOCTYPE rss [<!ENTITY a "bad">]><rss/>','https://lsong.org/feed')).rejects.toThrow();
+    expect((await boundedText(new Response('x'.repeat(2_100_000)))).length).toBe(2_100_000);
     await expect(boundedText(new Response('123456'),5)).rejects.toThrow();
   });
 
