@@ -91,6 +91,7 @@ describe("reader", () => {
     const html = await response.text();
     expect(response.headers.get("Content-Security-Policy")).toContain("default-src 'self'");
     expect(response.headers.get("Content-Security-Policy")).toContain("img-src 'self' https:");
+    expect(html).toContain('<div id="app"></div>');
     expect(html).toContain('<script type="module" src="/app.js"></script>');
     const frontend = await (await call("/app.js")).text();
     expect(frontend).toContain("htm.bind(h)");
