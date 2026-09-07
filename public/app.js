@@ -83,7 +83,8 @@ function Subscribe({ api, reload, report }) {
   const [busy, setBusy] = useState(false);
   const submit = async event => {
     event.preventDefault(); setBusy(true); report('Finding your feed…');
-    try { const data = new FormData(event.currentTarget); await api('/subscriptions', { method: 'POST', body: { url: data.get('url'), folder: data.get('folder') } }); event.currentTarget.reset(); await reload(); report('Subscription added.'); }
+    const form = event.currentTarget;
+    try { const data = new FormData(form); await api('/subscriptions', { method: 'POST', body: { url: data.get('url'), folder: data.get('folder') } }); form.reset(); await reload(); report('Subscription added.'); }
     catch (error) { report(error.message, true); }
     finally { setBusy(false); }
   };
