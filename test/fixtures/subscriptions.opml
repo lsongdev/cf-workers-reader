@@ -8,6 +8,6 @@
       </outline>
       <outline text="RSS Fixture" xmlUrl="https://fixture.lsong.org/rss.xml"/>
     </outline>
-    <outline title="Top level" xmlUrl="https://top.lsong.org/feed"/>
+    <outline title="Fred&#39;s &amp; Notes" xmlUrl="https://top.lsong.org/feed"/>
   </body>
 </opml>

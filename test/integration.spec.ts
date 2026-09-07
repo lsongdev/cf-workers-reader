@@ -275,7 +275,7 @@ describe('shared reader', () => {
     expect(parseOpml(fixtures.TEST_OPML_FIXTURE)).toEqual([
       { url: 'https://atom.lsong.org/feed.xml', title: 'Atom Fixture', folder: 'Engineering / Web' },
       { url: 'https://fixture.lsong.org/rss.xml', title: 'RSS Fixture', folder: 'Engineering' },
-      { url: 'https://top.lsong.org/feed', title: 'Top level', folder: '' },
+      { url: 'https://top.lsong.org/feed', title: "Fred's & Notes", folder: '' },
     ]);
     expect(() => parseOpml('<!DOCTYPE opml><opml><body/></opml>')).toThrow();
   });
@@ -290,7 +290,7 @@ describe('shared reader', () => {
     expect(subscriptions).toEqual(expect.arrayContaining([
       expect.objectContaining({ title: 'Atom Fixture', folder: 'Engineering / Web' }),
       expect.objectContaining({ title: 'RSS Fixture', folder: 'Engineering' }),
-      expect.objectContaining({ title: 'Top level', folder: '' }),
+      expect.objectContaining({ title: "Fred's & Notes", folder: '' }),
     ]));
     expect(await (await alice('/subscriptions/import', 'POST', { opml: fixture })).json()).toMatchObject({ imported: 0, updated: 3, skipped: 0, failed: 0 });
     await env.DB.prepare("UPDATE feeds SET last_success_at=unixepoch() WHERE title='Atom Fixture'").run();

@@ -78,6 +78,13 @@ type Xml = Record<string, unknown>;
 const obj = (value: unknown): Xml => typeof value === 'object' && value !== null ? value as Xml : {};
 const list = (value: unknown): unknown[] => value === undefined ? [] : Array.isArray(value) ? value : [value];
 const text = (value: unknown): string => typeof value === 'string' || typeof value === 'number' ? String(value) : typeof obj(value)['#text'] === 'string' ? String(obj(value)['#text']) : '';
+const xmlAttributeText = (value: unknown): string => text(value).replace(/&(?:#(\d+)|#x([\da-f]+)|amp|apos|quot|lt|gt);/gi, (entity, decimal, hexadecimal) => {
+  if (decimal || hexadecimal) {
+    const point = Number.parseInt(decimal || hexadecimal, decimal ? 10 : 16);
+    try { return point <= 0x10ffff ? String.fromCodePoint(point) : entity; } catch { return entity; }
+  }
+  return ({ '&amp;': '&', '&apos;': "'", '&quot;': '"', '&lt;': '<', '&gt;': '>' } as Record<string, string>)[entity.toLowerCase()] || entity;
+});
 function link(value: unknown, base: string): string {
   for (const entry of list(value)) {
     const row = obj(entry);
@@ -102,7 +109,7 @@ export function parseOpml(xml: string): OpmlSubscription[] {
     for (const value of list(values)) {
       const row = obj(value);
       const url = text(row['@_xmlUrl'] ?? row['@_xmlurl']).trim();
-      const label = text(row['@_title'] ?? row['@_text']).trim();
+      const label = xmlAttributeText(row['@_title'] ?? row['@_text']).trim();
       if (url) {
         subscriptions.push({ url: url.slice(0, 2048), title: label.slice(0, 500), folder: folders.join(' / ').slice(0, 100) });
         if (subscriptions.length > 500) throw new Error('OPML contains more than 500 subscriptions.');
