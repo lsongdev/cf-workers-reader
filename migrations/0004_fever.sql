@@ -1,0 +1,9 @@
+ALTER TABLE api_credentials ADD COLUMN username TEXT;
+ALTER TABLE api_credentials ADD COLUMN last_used_at INTEGER;
+ALTER TABLE item_states ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  UNIQUE(user_id, title)
+);

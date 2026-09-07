@@ -1,3 +1,4 @@
+import { fever } from "./fever";
 import { reader } from "./reader";
 import { scheduleFeeds, refreshFeed } from "./feeds";
 import { Hono, type Context, type Next } from "hono";
@@ -23,7 +24,7 @@ app.use("*", secureHeaders({
 
 app.use("*", async (context, next) => {
   await next();
-  if (context.req.path.startsWith("/api/") || context.req.path.startsWith("/login")) context.header("Cache-Control", "no-store");
+  if (context.req.path.startsWith("/api/") || context.req.path.startsWith("/login") || context.req.path.startsWith("/fever")) context.header("Cache-Control", "no-store");
 });
 
 app.use("/login*", loginRateLimit);
@@ -57,6 +58,7 @@ app.get("/login/callback", async (context) => {
 });
 
 app.route("/api", reader);
+app.route("/fever", fever);
 
 app.notFound(async (context) => cloneResponse(await context.env.ASSETS.fetch(context.req.raw)));
 

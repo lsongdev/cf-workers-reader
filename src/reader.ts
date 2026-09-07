@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { csrfToken, currentUser, revokeSession, validCsrf } from './auth';
 import { subscribe } from './feeds';
+import { md5, randomToken, sha256 } from './crypto';
 import type { User } from './types';
 
 export const READ_SQL = 'COALESCE(st.read, CASE WHEN i.id<=s.read_before THEN 1 ELSE 0 END)';
@@ -17,6 +18,22 @@ reader.use('*', async (c, next) => {
 });
 reader.get('/me', async c => c.json({ user: c.get('user'), csrf: await csrfToken(c) }));
 reader.post('/logout', async c => { await revokeSession(c); return c.json({ ok: true }); });
+reader.get('/client-credential', async c => {
+  const value = await c.env.DB.prepare('SELECT username, created_at, last_used_at FROM api_credentials WHERE user_id=?').bind(c.get('user').sub).first();
+  return c.json({ credential: value || null, endpoint: `${c.env.APP_URL}/fever/` });
+});
+reader.post('/client-credential', async c => {
+  const username = `reader-${randomToken(6).toLowerCase()}@local`;
+  const password = randomToken(24);
+  const protocolKey = md5(`${username}:${password}`);
+  await c.env.DB.prepare('INSERT INTO api_credentials(user_id,key_hash,username,created_at) VALUES (?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET key_hash=excluded.key_hash,username=excluded.username,created_at=excluded.created_at,last_used_at=NULL')
+    .bind(c.get('user').sub, await sha256(protocolKey), username, Math.floor(Date.now()/1000)).run();
+  return c.json({ endpoint: `${c.env.APP_URL}/fever/`, username, password }, 201);
+});
+reader.delete('/client-credential', async c => {
+  await c.env.DB.prepare('DELETE FROM api_credentials WHERE user_id=?').bind(c.get('user').sub).run();
+  return c.json({ ok: true });
+});
 reader.get('/subscriptions', async c => {
   const rows = await c.env.DB.prepare(`SELECT f.id, f.url, COALESCE(s.custom_title, f.title) AS title, s.folder, f.error, f.last_success_at, f.next_fetch_at,
     (SELECT COUNT(*) FROM items i LEFT JOIN item_states st ON st.item_id=i.id AND st.user_id=s.user_id WHERE i.feed_id=f.id AND ${READ_SQL}=0) AS unread
@@ -55,9 +72,9 @@ reader.get('/items/:id', async c => {
   return item ? c.json(item) : c.json({ error: 'Article not found.' }, 404);
 });
 export async function updateItem(env: Env, user: string, id: number, read: number | null, starred: number | null): Promise<boolean> {
-  const result = await env.DB.prepare(`INSERT INTO item_states(user_id,item_id,read,starred)
-    SELECT ?, i.id, ?, COALESCE(?,0) FROM items i JOIN subscriptions s ON s.feed_id=i.feed_id AND s.user_id=? WHERE i.id=?
-    ON CONFLICT(user_id,item_id) DO UPDATE SET read=COALESCE(?,item_states.read), starred=COALESCE(?,item_states.starred)`)
+  const result = await env.DB.prepare(`INSERT INTO item_states(user_id,item_id,read,starred,updated_at)
+    SELECT ?, i.id, ?, COALESCE(?,0), unixepoch() FROM items i JOIN subscriptions s ON s.feed_id=i.feed_id AND s.user_id=? WHERE i.id=?
+    ON CONFLICT(user_id,item_id) DO UPDATE SET read=COALESCE(?,item_states.read), starred=COALESCE(?,item_states.starred), updated_at=unixepoch()`)
     .bind(user, read, starred, user, id, read, starred).run();
   return result.meta.changes > 0;
 }

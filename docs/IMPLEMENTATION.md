@@ -37,3 +37,10 @@ Do not mark complete until all three milestones are committed/deployed and their
 - Web behavior covers URL subscription, folders/custom titles, unsubscribe, paged all/unread/starred views, individual read/unread/star state and ingestion-ID mark-all-read watermarks.
 - `pnpm check`: TypeScript and 12 Workers-runtime tests passed, including two-account state isolation, global feed/item dedupe, authorization, CSRF, HTML discovery, Atom/RSS parsing, sanitizer behavior, conditional 304 requests, fetch lease concurrency and error backoff.
 - Browser QA passed against a seeded local D1 account on desktop and a 390×844 viewport. Opening an article changed its unread count from one to zero and rendered its sanitized body.
+
+### Milestone 3 validation
+
+- `/fever/?api` implements the Fever JSON API version 3 authentication model and read/sync/write surfaces used by RSS clients: groups, feeds and relationships, items with all three pagination modes, empty favicons/hot links, unread/saved IDs, item state, collection mark-read and recently-read undo.
+- OIDC-authenticated client settings create, rotate and revoke one credential per user. Reader displays the generated password once. The Fever-required MD5 value is accepted at the protocol boundary and stored only as a SHA-256 digest; OIDC passwords are never used.
+- Workers-runtime integration coverage includes canonical MD5 vectors, bad credentials, catalog/group relationships, item pagination, unread/saved writes, feed mark-read, credential rotation/revocation and an empty catalog for a second user.
+- Client setup and the implemented protocol subset are documented in README.md. Fever XML output and Hot-link ranking are outside this MVP; JSON is the sync format used by supported clients.

@@ -27,3 +27,13 @@ Production configuration lives in `wrangler.jsonc`. Sessions are opaque, hashed 
 The frontend is a static browser-native ESM application in `public/app.js`, rendered with Preact and HTM. Its dependencies are vendored under `public/vendor` with their license files. It communicates only through the authenticated JSON API under `/api`.
 
 The Worker owns OIDC, per-user sessions/state and a shared feed registry in D1. A five-minute cron schedules due feeds onto `reader-fetch`; queue consumers use one-use queue tokens and leases, conditional HTTP requests, adaptive polling and backoff. The MVP accepts public RSS/Atom feeds and websites with a feed `<link>`; credentialed private feeds are intentionally excluded because their content cannot be globally deduplicated safely.
+
+## Fever clients
+
+Open **Client settings** after signing in and create a client credential. Configure the client as follows:
+
+- Service: Fever
+- Server URL: `https://read.lsong.org/fever/`
+- Username and password: the one-time values shown by Reader
+
+Reader implements Fever JSON API version 3 for feeds, groups and relationships, empty favicons and hot links, item pagination (`since_id`, `max_id`, `with_ids`), unread/saved ID sync, item read/unread/save/unsave, feed/group mark-read, and recently-read undo. Creating or rotating a credential invalidates the previous one; revoke it from the same page. Reader never asks a client for your my.lsong.org password.

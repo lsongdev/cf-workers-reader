@@ -159,6 +159,7 @@ describe("reader", () => {
 // Reader acceptance: two accounts share storage/fetches but never subscription or item state.
 import { refreshFeed, subscribe, nextInterval } from '../src/feeds';
 import { parseFeed, publicFeedUrl, boundedText } from '../src/feed-content';
+import { md5 } from '../src/crypto';
 const rss = `<?xml version="1.0"?><rss version="2.0"><channel><title>Shared blog</title><link>https://blog.lsong.org</link><item><guid>post-1</guid><title>First article</title><link>https://blog.lsong.org/first</link><description><![CDATA[<p>Hello <strong>reader</strong><script>alert(1)</script><a href="javascript:alert(1)" onclick="evil()">bad</a></p>]]></description><pubDate>Fri, 04 Sep 2026 00:00:00 GMT</pubDate></item></channel></rss>`;
 
 async function account(subject: string) {
@@ -235,5 +236,64 @@ describe('shared reader', () => {
     for (const url of ['http://127.0.0.1/rss','http://[::1]/','http://localhost/x','https://a:b@lsong.org/rss','file:///tmp/a','https://lsong.org/feed?token=secret']) expect(() => publicFeedUrl(url)).toThrow();
     await expect(parseFeed('<!DOCTYPE rss [<!ENTITY a "bad">]><rss/>','https://lsong.org/feed')).rejects.toThrow();
     await expect(boundedText(new Response('123456'),5)).rejects.toThrow();
+  });
+});
+
+
+describe('Fever API v3', () => {
+  afterEach(() => vi.restoreAllMocks());
+  it('matches required MD5 vectors', () => {
+    expect(md5('')).toBe('d41d8cd98f00b204e9800998ecf8427e');
+    expect(md5('abc')).toBe('900150983cd24fb0d6963f7d28e17f72');
+  });
+
+  it('syncs feeds, groups, items and per-user state, then revokes access', async () => {
+    const alice = await account('reader-alice');
+    const subscriptions = await (await alice('/subscriptions')).json<Array<{ id:number; title:string }>>();
+    const feed = subscriptions[0]!;
+    await alice(`/subscriptions/${feed.id}`, 'PATCH', { title: feed.title, folder: 'Reading' });
+    const issued = await (await alice('/client-credential', 'POST', {})).json<{ endpoint:string;username:string;password:string }>();
+    expect(issued.endpoint).toBe('http://localhost/fever/');
+    const status = await (await alice('/client-credential')).json<{credential:Record<string,unknown>}>();
+    expect(status.credential).not.toHaveProperty('password');
+    expect(status.credential).not.toHaveProperty('key_hash');
+    const key = md5(`${issued.username}:${issued.password}`);
+    const fever = async (query:string, fields:Record<string,string>={}) => call('/fever/?api&'+query, { method:'POST', body:new URLSearchParams({ api_key:key, ...fields }) });
+    expect(await (await call('/fever/?api&feeds',{method:'POST',body:new URLSearchParams({api_key:'00000000000000000000000000000000'})})).json()).toMatchObject({api_version:3,auth:0});
+    const catalog = await (await fever('feeds&groups&favicons')).json<{auth:number;feeds:Array<{id:number}>;groups:Array<{id:number;title:string}>;feeds_groups:Array<{group_id:number;feed_ids:string}>;favicons:unknown[]} >();
+    expect(catalog.auth).toBe(1);
+    expect(catalog.feeds.map(value=>value.id)).toContain(feed.id);
+    expect(catalog.groups.map(value=>value.title)).toContain('Reading');
+    expect(catalog.feeds_groups.some(value=>value.feed_ids.split(',').includes(String(feed.id)))).toBe(true);
+    expect(catalog.favicons).toEqual([]);
+    const page = await (await fever('items&max_id=0')).json<{items:Array<{id:number;is_read:number;is_saved:number;html:string}>;total_items:number}>();
+    expect(page.total_items).toBeGreaterThan(0);
+    const item = page.items[0]!;
+    expect(item.html).toContain('<p>');
+    expect((await (await fever('items&with_ids='+item.id)).json<{items:unknown[]}>()).items).toHaveLength(1);
+    expect((await (await fever('items&since_id='+item.id)).json<{items:unknown[]}>()).items).toEqual([]);
+    const saved = await (await fever('',{mark:'item',as:'saved',id:String(item.id)})).json<{saved_item_ids:string}>();
+    expect(saved.saved_item_ids.split(',')).toContain(String(item.id));
+    await fever('',{mark:'item',as:'read',id:String(item.id)});
+    const unread = await (await fever('unread_item_ids')).json<{unread_item_ids:string}>();
+    expect(unread.unread_item_ids.split(',')).not.toContain(String(item.id));
+    await fever('',{mark:'item',as:'unread',id:String(item.id)});
+    expect((await (await fever('unread_item_ids')).json<{unread_item_ids:string}>()).unread_item_ids.split(',')).toContain(String(item.id));
+    await fever('',{mark:'feed',as:'read',id:String(feed.id),before:String(Math.floor(Date.now()/1000)+1)});
+    expect((await (await fever('unread_item_ids')).json<{unread_item_ids:string}>()).unread_item_ids.split(',')).not.toContain(String(item.id));
+    const rotated = await (await alice('/client-credential','POST',{})).json<{username:string;password:string}>();
+    expect((await fever('feeds')).json()).resolves.toMatchObject({auth:0});
+    const nextKey=md5(`${rotated.username}:${rotated.password}`);
+    expect(await (await call('/fever/?api&feeds',{method:'POST',body:new URLSearchParams({api_key:nextKey})})).json()).toMatchObject({auth:1});
+    await alice('/client-credential','DELETE');
+    expect(await (await call('/fever/?api&feeds',{method:'POST',body:new URLSearchParams({api_key:nextKey})})).json()).toMatchObject({auth:0});
+  });
+
+  it('keeps one user’s Fever catalog invisible to another', async () => {
+    const bob = await account('reader-bob');
+    const issued = await (await bob('/client-credential','POST',{})).json<{username:string;password:string}>();
+    const response = await call('/fever/?api&feeds&items&unread_item_ids',{method:'POST',body:new URLSearchParams({api_key:md5(`${issued.username}:${issued.password}`)})});
+    const body=await response.json<{auth:number;feeds:unknown[];items:unknown[];unread_item_ids:string}>();
+    expect(body).toMatchObject({auth:1,feeds:[],items:[],unread_item_ids:''});
   });
 });
