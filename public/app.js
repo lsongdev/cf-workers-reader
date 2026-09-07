@@ -42,15 +42,15 @@ function useRoute() {
   return route;
 }
 
-function Shell({ user, csrf, children }) {
+function Shell({ user, csrf, loginHref = '/login', children }) {
   const logout = async () => { await request('/logout', { method: 'POST', csrf }); location.href = '/'; };
-  return html`<div class="app-shell">
+  return html`<div class=${user ? 'app-shell' : 'app-shell landing-shell'}>
     <header class="navbar">
-      <${Link} class="navbar-brand" href="/" aria-label="Reader home"><img src="/icon-192.png" width="24" height="24" alt=""/>Reader<//>
-      <nav class="account-nav" aria-label="Account navigation">${user && html`<${Link} class=${location.pathname === '/settings' ? 'account-link active' : 'account-link'} href="/settings">${user.name || (user.username ? `@${user.username}` : 'Account')}<//><button class="button-link" onClick=${logout}>Sign out</button>`}</nav>
+      <${Link} class="navbar-brand" href="/" aria-label="Reader home"><img class="navbar-brand-mark" src="/icon-192.png" width="22" height="22" alt=""/><span>Reader</span><//>
+      <nav class="account-nav" aria-label="Account navigation">${user ? html`<${Link} class=${location.pathname === '/settings' ? 'account-link active' : 'account-link'} href="/settings">${user.name || (user.username ? `@${user.username}` : 'Account')}<//><button class="button-link" onClick=${logout}>Sign out</button>` : html`<a class="signin-link" href=${loginHref}>Sign in</a>`}</nav>
     </header>
     <main>${children}</main>
-    <footer><span>Reader</span><span>Part of lsong.org</span></footer>
+    <footer class="site-footer"><a class="navbar-brand" href="https://lsong.org"><img class="navbar-brand-mark" src="https://lsong.org/icon.png" width="22" height="22" alt=""/><span>lsong.org</span></a><p>Reader</p><nav aria-label="Footer navigation"><a href="mailto:hi@lsong.org">Email</a><a href="https://my.lsong.org/terms.html">Terms</a><a href="https://my.lsong.org/privacy.html">Privacy</a></nav></footer>
   </div>`;
 }
 
@@ -59,7 +59,7 @@ function Landing() {
   const returnTo = location.pathname + location.search;
   const login = returnTo === '/' ? '/login' : `/login?return_to=${encodeURIComponent(returnTo)}`;
   useEffect(() => setTitle(''), []);
-  return html`<${Shell}><section class="site-hero">${error && html`<div class="alert error" role="alert">Sign-in could not be completed. Please try again.</div>`}<p class="eyebrow">Reader · Your personal reading space</p><h1 class="site-hero-title">Follow what matters.<br/>Read at your pace.</h1><p class="site-hero-copy">One place for your RSS subscriptions. Your subscriptions, reading progress and saved articles stay with your account.</p><a class="button button-primary" href=${login}>Sign in with my.lsong.org</a></section><p class="landing-developer-link"><a href="/health">Service health</a></p><//>`;
+  return html`<${Shell} loginHref=${login}><section class="site-hero">${error && html`<div class="alert error" role="alert">Sign-in could not be completed. Please try again.</div>`}<p class="eyebrow">Reader · Your personal reading space</p><h1 class="site-hero-title">Follow what matters.<br/>Read at your pace.</h1><p class="site-hero-copy">One place for your RSS subscriptions. Your subscriptions, reading progress and saved articles stay with your account.</p><div class="site-hero-actions"><a class="button button-primary" href=${login}>Sign in with my.lsong.org</a></div></section><section class="home-features" aria-label="Reader features"><article><span class="home-feature-mark">01</span><h2>One quiet library</h2><p>Keep every RSS and Atom subscription together without an algorithm choosing what you see.</p></article><article><span class="home-feature-mark">02</span><h2>Your reading state</h2><p>Unread progress and saved articles follow your account across compatible Reader clients.</p></article><article><span class="home-feature-mark">03</span><h2>Open by design</h2><p>Bring an OPML collection, add any public feed, or connect through the Fever API.</p></article></section><p class="home-developer-link">Checking the service? <a href="/health">View Reader health</a>.</p><//>`;
 }
 
 function ViewHeader({ eyebrow, title, description, back, actions }) {

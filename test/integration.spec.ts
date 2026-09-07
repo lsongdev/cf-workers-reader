@@ -96,6 +96,9 @@ describe("reader", () => {
     const frontend = await (await call("/app.js")).text();
     expect(frontend).toContain("htm.bind(h)");
     expect(frontend).toContain("from '/vendor/preact.js'");
+    expect(frontend).toContain('class="site-footer"');
+    expect(frontend).toContain('class="home-features"');
+    expect(frontend).toContain('https://my.lsong.org/privacy.html');
   });
 
   it("serves separate subscription, article-list and reading views", async () => {
