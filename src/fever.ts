@@ -13,7 +13,7 @@ fever.post('*', async c => {
   const apiKey = form.get('api_key');
   const base: Output = { api_version: 3, auth: 0 };
   if (typeof apiKey !== 'string' || !/^[a-f\d]{32}$/i.test(apiKey)) return c.json(base);
-  const credential = await c.env.DB.prepare('SELECT user_id FROM api_credentials WHERE key_hash=?').bind(await sha256(apiKey.toLowerCase())).first<{ user_id: string }>();
+  const credential = await c.env.DB.prepare('SELECT ac.user_id FROM api_credentials ac JOIN users u ON u.id=ac.user_id AND u.username=ac.username WHERE ac.key_hash=?').bind(await sha256(apiKey.toLowerCase())).first<{ user_id: string }>();
   if (!credential) return c.json(base);
   const user = credential.user_id;
   await c.env.DB.prepare('UPDATE api_credentials SET last_used_at=? WHERE user_id=?').bind(now(), user).run();

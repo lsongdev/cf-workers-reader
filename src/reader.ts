@@ -19,7 +19,7 @@ reader.use('*', async (c, next) => {
 reader.get('/me', async c => c.json({ user: c.get('user'), csrf: await csrfToken(c) }));
 reader.post('/logout', async c => { await revokeSession(c); return c.json({ ok: true }); });
 reader.get('/client-credential', async c => {
-  const value = await c.env.DB.prepare('SELECT username, created_at, last_used_at FROM api_credentials WHERE user_id=?').bind(c.get('user').sub).first();
+  const value = await c.env.DB.prepare('SELECT ac.username, ac.created_at, ac.last_used_at FROM api_credentials ac JOIN users u ON u.id=ac.user_id AND u.username=ac.username WHERE ac.user_id=?').bind(c.get('user').sub).first();
   return c.json({ credential: value || null, endpoint: `${c.env.APP_URL}/fever/` });
 });
 reader.post('/client-credential', async c => {

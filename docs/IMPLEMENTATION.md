@@ -41,7 +41,7 @@ Do not mark complete until all three milestones are committed/deployed and their
 ### Milestone 3 validation
 
 - `/fever/?api` implements the Fever JSON API version 3 authentication model and read/sync/write surfaces used by RSS clients: groups, feeds and relationships, items with all three pagination modes, empty favicons/hot links, unread/saved IDs, item state, collection mark-read and recently-read undo.
-- OIDC-authenticated client settings create, rotate and revoke one credential per user. Reader displays the generated password once. The Fever-required MD5 value is accepted at the protocol boundary and stored only as a SHA-256 digest; OIDC passwords are never used.
+- OIDC-authenticated client settings create, rotate and revoke one credential per user. The Fever username is the OIDC `preferred_username`; Reader displays the generated password once. Credentials issued with an older username stop authenticating after the OIDC username changes. The Fever-required MD5 value is accepted at the protocol boundary and stored only as a SHA-256 digest; OIDC passwords are never used.
 - Workers-runtime integration coverage includes canonical MD5 vectors, bad credentials, catalog/group relationships, item pagination, unread/saved writes, feed mark-read, credential rotation/revocation and an empty catalog for a second user.
 - Client setup and the implemented protocol subset are documented in README.md. Fever XML output and Hot-link ranking are outside this MVP; JSON is the sync format used by supported clients.
 - The Worker and Queue producer/consumer deployed successfully. Migration 0005 persists the delayed Queue heartbeat generation and sequence, avoiding any dependency on an additional account-level Cron slot.

@@ -172,7 +172,7 @@ describe("reader", () => {
 // Reader acceptance: two accounts share storage/fetches but never subscription or item state.
 import { ensureScheduler, refreshFeed, runSchedulerHeartbeat, subscribe, nextInterval } from '../src/feeds';
 import { parseFeed, publicFeedUrl, boundedText } from '../src/feed-content';
-import { md5 } from '../src/crypto';
+import { md5, sha256 } from '../src/crypto';
 const rss = `<?xml version="1.0"?><rss version="2.0"><channel><title>Shared blog</title><link>https://blog.lsong.org</link><item><guid>post-1</guid><title>First article</title><link>https://blog.lsong.org/first</link><description><![CDATA[<p>Hello <strong>reader</strong><script>alert(1)</script><a href="javascript:alert(1)" onclick="evil()">bad</a></p>]]></description><pubDate>Fri, 04 Sep 2026 00:00:00 GMT</pubDate></item></channel></rss>`;
 
 async function account(subject: string) {
@@ -283,6 +283,18 @@ describe('Fever API v3', () => {
   it('matches required MD5 vectors', () => {
     expect(md5('')).toBe('d41d8cd98f00b204e9800998ecf8427e');
     expect(md5('abc')).toBe('900150983cd24fb0d6963f7d28e17f72');
+  });
+
+  it('rejects credentials whose username no longer matches OIDC', async () => {
+    const alice = await account('reader-legacy');
+    const legacyKey = md5('reader-legacy@local:old-password');
+    await env.DB.prepare('INSERT INTO api_credentials(user_id,key_hash,username) VALUES (?,?,?)')
+      .bind('reader-legacy', await sha256(legacyKey), 'reader-legacy@local').run();
+
+    const status = await (await alice('/client-credential')).json<{ credential: unknown }>();
+    expect(status.credential).toBeNull();
+    expect(await (await call('/fever/?api&feeds', { method: 'POST', body: new URLSearchParams({ api_key: legacyKey }) })).json())
+      .toMatchObject({ auth: 0 });
   });
 
   it('syncs feeds, groups, items and per-user state, then revokes access', async () => {

@@ -30,10 +30,11 @@ The Worker owns OIDC, per-user sessions/state and a shared feed registry in D1. 
 
 ## Fever clients
 
-Open **Client settings** after signing in and create a client credential. Configure the client as follows:
+Click your username in the top navigation after signing in, then create a client credential. Configure the client as follows:
 
 - Service: Fever
 - Server URL: `https://read.lsong.org/fever/`
-- Username and password: the one-time values shown by Reader
+- Username: your my.lsong.org OIDC username
+- Password: the one-time value shown by Reader
 
 Reader implements Fever JSON API version 3 for feeds, groups and relationships, empty favicons and hot links, item pagination (`since_id`, `max_id`, `with_ids`), unread/saved ID sync, item read/unread/save/unsave, feed/group mark-read, and recently-read undo. Creating or rotating a credential invalidates the previous one; revoke it from the same page. Reader never asks a client for your my.lsong.org password.
