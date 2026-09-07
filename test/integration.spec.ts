@@ -284,14 +284,14 @@ describe('shared reader', () => {
     const fixture = (env as unknown as { TEST_OPML_FIXTURE: string }).TEST_OPML_FIXTURE;
     const imported = await alice('/subscriptions/import', 'POST', { opml: fixture });
     expect(imported.status).toBe(201);
-    expect(await imported.json()).toMatchObject({ imported: 3, skipped: 0, failed: 0, queued: 3 });
+    expect(await imported.json()).toMatchObject({ imported: 3, updated: 0, skipped: 0, failed: 0, queued: 3 });
     const subscriptions = await (await alice('/subscriptions')).json<Array<{ title: string; folder: string }>>();
     expect(subscriptions).toEqual(expect.arrayContaining([
       expect.objectContaining({ title: 'Atom Fixture', folder: 'Engineering / Web' }),
       expect.objectContaining({ title: 'RSS Fixture', folder: 'Engineering' }),
       expect.objectContaining({ title: 'Top level', folder: '' }),
     ]));
-    expect(await (await alice('/subscriptions/import', 'POST', { opml: fixture })).json()).toMatchObject({ imported: 0, skipped: 3, failed: 0 });
+    expect(await (await alice('/subscriptions/import', 'POST', { opml: fixture })).json()).toMatchObject({ imported: 0, updated: 3, skipped: 0, failed: 0 });
     await env.DB.prepare("UPDATE feeds SET last_success_at=unixepoch() WHERE title='Atom Fixture'").run();
     expect(await (await alice('/feed-directory')).json()).toEqual(expect.arrayContaining([expect.objectContaining({ title: 'Atom Fixture', subscribed: 1 })]));
     const bob = await account('reader-directory');

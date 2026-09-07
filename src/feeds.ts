@@ -35,23 +35,30 @@ export async function subscribe(env: Env, user: string, value: string, folder = 
   return found.id;
 }
 
-export async function importSubscriptions(env: Env, user: string, entries: OpmlSubscription[]): Promise<{ imported: number; skipped: number; failed: number; queued: number }> {
+export async function importSubscriptions(env: Env, user: string, entries: OpmlSubscription[]): Promise<{ imported: number; updated: number; skipped: number; failed: number; queued: number }> {
   const current = await env.DB.prepare('SELECT COUNT(*) AS n FROM subscriptions WHERE user_id=?').bind(user).first<{ n: number }>();
   let available = Math.max(0, 500 - (current?.n || 0));
-  let imported = 0, skipped = 0, failed = 0;
+  let imported = 0, updated = 0, skipped = 0, failed = 0;
   const queued: FeedQueueMessage[] = [];
   const queuedIds = new Set<number>();
   for (const entry of entries) {
-    if (!available) { skipped++; continue; }
     try {
       const submitted = publicFeedUrl(entry.url.trim());
       let feed = await env.DB.prepare('SELECT f.id,f.last_fetched_at FROM feed_aliases a JOIN feeds f ON f.id=a.feed_id WHERE a.url=?').bind(submitted).first<{ id: number; last_fetched_at: number | null }>();
       if (!feed) {
+        if (!available) { skipped++; continue; }
         feed = await env.DB.prepare('INSERT INTO feeds(url,title,site_url) VALUES (?,?,NULL) ON CONFLICT(url) DO UPDATE SET url=excluded.url RETURNING id,last_fetched_at')
           .bind(submitted, entry.title || new URL(submitted).hostname).first<{ id: number; last_fetched_at: number | null }>();
         if (!feed) throw new Error('Could not create feed.');
         await env.DB.prepare('INSERT INTO feed_aliases(url,feed_id) VALUES (?,?) ON CONFLICT(url) DO NOTHING').bind(submitted, feed.id).run();
       }
+      const existing = await env.DB.prepare('SELECT feed_id FROM subscriptions WHERE user_id=? AND feed_id=?').bind(user, feed.id).first();
+      if (existing) {
+        await env.DB.prepare('UPDATE subscriptions SET folder=?,custom_title=? WHERE user_id=? AND feed_id=?').bind(entry.folder.slice(0, 100), entry.title || null, user, feed.id).run();
+        updated++;
+        continue;
+      }
+      if (!available) { skipped++; continue; }
       const added = await env.DB.prepare('INSERT INTO subscriptions(user_id,feed_id,folder,custom_title) VALUES (?,?,?,?) ON CONFLICT(user_id,feed_id) DO NOTHING RETURNING feed_id')
         .bind(user, feed.id, entry.folder.slice(0, 100), entry.title || null).first();
       if (!added) { skipped++; continue; }
@@ -69,7 +76,7 @@ export async function importSubscriptions(env: Env, user: string, entries: OpmlS
     if (queued.length) await env.DB.batch(queued.map(message => env.DB.prepare('UPDATE feeds SET queue_token=NULL,queued_at=0 WHERE id=? AND queue_token=?').bind(message.id, message.token)));
     throw error;
   }
-  return { imported, skipped, failed, queued: queued.length };
+  return { imported, updated, skipped, failed, queued: queued.length };
 }
 
 export function nextInterval(interval: number, added: number): number {

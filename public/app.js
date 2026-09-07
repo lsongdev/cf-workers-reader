@@ -99,7 +99,7 @@ function OpmlImport({ api, onComplete }) {
     setBusy(true); onComplete('Importing subscriptions…');
     try {
       const result = await api('/subscriptions/import', { method: 'POST', body: { opml: await file.text() } });
-      const details = [`${result.imported} imported`, `${result.skipped} already present or over the limit`];
+      const details = [`${result.imported} imported`, `${result.updated} updated`, `${result.skipped} over the limit`];
       if (result.failed) details.push(`${result.failed} invalid`);
       onComplete(`OPML import complete: ${details.join(', ')}. Feeds are updating in the background.`, false, true);
     } catch (error) { onComplete(error.message, true); }
