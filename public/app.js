@@ -20,7 +20,7 @@ const setTitle = title => { document.title = title ? `${title} · Reader` : 'Rea
 function navigate(to) {
   history.pushState({}, '', to);
   window.dispatchEvent(new PopStateEvent('popstate'));
-  scrollTo({ top: 0, behavior: 'instant' });
+  scrollTo(0, 0);
 }
 
 function Link({ href, class: className, children, ...props }) {
@@ -58,8 +58,10 @@ function Shell({ user, csrf, children }) {
 
 function Landing() {
   const error = new URLSearchParams(location.search).get('error');
+  const returnTo = location.pathname + location.search;
+  const login = returnTo === '/' ? '/login' : `/login?return_to=${encodeURIComponent(returnTo)}`;
   useEffect(() => setTitle(''), []);
-  return html`<${Shell}><section class="site-hero">${error && html`<div class="alert error" role="alert">Sign-in could not be completed. Please try again.</div>`}<p class="eyebrow">Reader · Your personal reading space</p><h1 class="site-hero-title">Follow what matters.<br/>Read at your pace.</h1><p class="site-hero-copy">One place for your RSS subscriptions. Your subscriptions, reading progress and saved articles stay with your account.</p><a class="button button-primary" href="/login">Sign in with my.lsong.org</a></section><p class="landing-developer-link"><a href="/health">Service health</a></p><//>`;
+  return html`<${Shell}><section class="site-hero">${error && html`<div class="alert error" role="alert">Sign-in could not be completed. Please try again.</div>`}<p class="eyebrow">Reader · Your personal reading space</p><h1 class="site-hero-title">Follow what matters.<br/>Read at your pace.</h1><p class="site-hero-copy">One place for your RSS subscriptions. Your subscriptions, reading progress and saved articles stay with your account.</p><a class="button button-primary" href=${login}>Sign in with my.lsong.org</a></section><p class="landing-developer-link"><a href="/health">Service health</a></p><//>`;
 }
 
 function ViewHeader({ eyebrow, title, description, back, actions }) {
