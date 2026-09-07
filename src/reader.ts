@@ -44,10 +44,10 @@ reader.get('/subscriptions', async c => {
 });
 reader.get('/feed-directory', async c => {
   const rows = await c.env.DB.prepare(`SELECT f.id,f.url,f.title,f.site_url,
-    EXISTS(SELECT 1 FROM subscriptions own WHERE own.feed_id=f.id AND own.user_id=?) AS subscribed,
     (SELECT COUNT(*) FROM subscriptions all_subs WHERE all_subs.feed_id=f.id) AS subscribers,
     (SELECT COUNT(*) FROM items i WHERE i.feed_id=f.id) AS items
-    FROM feeds f WHERE f.last_success_at IS NOT NULL ORDER BY subscribed DESC,subscribers DESC,f.title LIMIT 200`).bind(c.get('user').sub).all();
+    FROM feeds f WHERE NOT EXISTS(SELECT 1 FROM subscriptions own WHERE own.feed_id=f.id AND own.user_id=?)
+    ORDER BY (f.last_success_at IS NULL) ASC,subscribers DESC,f.title LIMIT 200`).bind(c.get('user').sub).all();
   return c.json(rows.results);
 });
 reader.post('/subscriptions', async c => {

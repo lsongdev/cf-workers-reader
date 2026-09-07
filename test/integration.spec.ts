@@ -314,9 +314,12 @@ describe('shared reader', () => {
     ]));
     expect(await (await alice('/subscriptions/import', 'POST', { opml: fixture })).json()).toMatchObject({ imported: 0, updated: 3, skipped: 0, failed: 0 });
     await env.DB.prepare("UPDATE feeds SET last_success_at=unixepoch() WHERE title='Atom Fixture'").run();
-    expect(await (await alice('/feed-directory')).json()).toEqual(expect.arrayContaining([expect.objectContaining({ title: 'Atom Fixture', subscribed: 1 })]));
+    expect(await (await alice('/feed-directory')).json()).not.toEqual(expect.arrayContaining([expect.objectContaining({ title: 'Atom Fixture' })]));
     const bob = await account('reader-directory');
-    expect(await (await bob('/feed-directory')).json()).toEqual(expect.arrayContaining([expect.objectContaining({ title: 'Atom Fixture', subscribed: 0 })]));
+    expect(await (await bob('/feed-directory')).json()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ title: 'Atom Fixture' }),
+      expect.objectContaining({ title: 'RSS Fixture' }),
+    ]));
     expect((await bob('/subscriptions', 'POST', { url: 'https://atom.lsong.org/feed.xml' })).status).toBe(201);
   });
 

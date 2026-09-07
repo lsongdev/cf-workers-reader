@@ -195,7 +195,7 @@ function SubscribeView({ auth }) {
     catch (error) { complete(error.message, true); }
     finally { setBusyId(0); }
   };
-  const available = directory?.filter(feed => !feed.subscribed) || [];
+  const available = directory || [];
   return html`<${Shell} user=${auth.user} csrf=${auth.csrf}><section class="view subscribe-view"><${ViewHeader} eyebrow="Grow your library" title="Add subscription" description="Follow a new address, choose a feed Reader already knows, or bring an OPML collection." back=${{ href: '/', label: 'Subscriptions' }}/><${Notice} value=${message}/><div class="subscribe-options"><${AddressSubscription} api=${api} onComplete=${complete}/><${OpmlImport} api=${api} onComplete=${complete}/></div><section class="directory"><div class="section-heading"><div><p class="eyebrow">Existing resources</p><h2>Ready to subscribe</h2></div><span>${available.length} available</span></div>${directory === undefined ? html`<${Skeleton} kind="directory" rows=${4}/>` : !available.length ? html`<div class="empty-state compact"><span>✓</span><h2>You follow every available feed</h2><p>New shared resources will appear here automatically.</p></div>` : html`<div class="directory-grid">${available.map(feed => html`<article class="directory-card" key=${feed.id}><div><strong>${feed.title}</strong><small>${feed.url}</small><span>${feed.items} articles · ${feed.subscribers} subscriber${feed.subscribers === 1 ? '' : 's'}</span></div><button disabled=${Boolean(busyId)} onClick=${() => subscribeExisting(feed)}>${busyId === feed.id ? 'Adding…' : 'Subscribe'}</button></article>`)}</div>`}</section></section><//>`;
 }
 
