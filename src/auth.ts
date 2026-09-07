@@ -5,9 +5,9 @@ import type { User } from "./types";
 
 export const SESSION_COOKIE = "__Host-session";
 const SESSION_TTL = 30 * 24 * 60 * 60;
-type AppContext = Context<{ Bindings: Env }>;
 
-export async function createSession(context: AppContext, sub: string, name: string | null): Promise<void> {
+
+export async function createSession<E extends { Bindings: Env }>(context: Context<E>, sub: string, name: string | null): Promise<void> {
   const token = randomToken();
   await context.env.DB.batch([
     context.env.DB.prepare("INSERT INTO users(id, name) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name").bind(sub, name),
@@ -18,25 +18,25 @@ export async function createSession(context: AppContext, sub: string, name: stri
   });
 }
 
-export async function currentUser(context: AppContext): Promise<User | null> {
+export async function currentUser<E extends { Bindings: Env }>(context: Context<E>): Promise<User | null> {
   const cookie = getCookie(context, SESSION_COOKIE);
   if (!cookie) return null;
   return context.env.DB.prepare("SELECT u.id AS sub, u.name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?")
     .bind(await sha256(cookie), now()).first<User>();
 }
 
-export async function revokeSession(context: AppContext): Promise<void> {
+export async function revokeSession<E extends { Bindings: Env }>(context: Context<E>): Promise<void> {
   const cookie = getCookie(context, SESSION_COOKIE);
   if (cookie) await context.env.DB.prepare("DELETE FROM sessions WHERE token_hash=?").bind(await sha256(cookie)).run();
   deleteCookie(context, SESSION_COOKIE, { path: "/", secure: true });
 }
 
-export async function csrfToken(context: AppContext): Promise<string> {
+export async function csrfToken<E extends { Bindings: Env }>(context: Context<E>): Promise<string> {
   const token = getCookie(context, SESSION_COOKIE);
   return token ? hmacSha256(token, `csrf\u0000${context.env.SESSION_SECRET}`) : "";
 }
 
-export async function validCsrf(context: AppContext, submitted: unknown): Promise<boolean> {
+export async function validCsrf<E extends { Bindings: Env }>(context: Context<E>, submitted: unknown): Promise<boolean> {
   if (typeof submitted !== "string" || !submitted) return false;
   const expected = await csrfToken(context);
   if (expected.length !== submitted.length) return false;

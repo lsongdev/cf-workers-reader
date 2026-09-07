@@ -28,3 +28,12 @@ Do not mark complete until all three milestones are committed/deployed and their
 - `pnpm check`: TypeScript and 9 Workers-runtime integration tests passed (2026-09-04), including OIDC success/PKCE, distinct subjects, logout revocation, CSRF rejection and state replay with the original cookie.
 - Preserve compatibility date 2026-07-29 and existing locked toolchain: downloading the latest runtime tarball stalled and an independent fetch timed out; cached locked dependencies restored with `pnpm install --offline --frozen-lockfile`. No requirement depends on the newer compatibility date.
 - Migration 0002 adds one-use OIDC transactions.
+
+### Milestone 2 validation
+
+- Frontend is a standalone Preact + HTM application composed as browser-native ESM in `public/app.js`; Preact, hooks and HTM ESM modules are vendored with their licenses, so production has no runtime CDN dependency. Worker code exposes JSON under `/api` and serves the SPA shell separately.
+- Shared feed registry supports RSS 2.0 and Atom, HTML alternate-link discovery, URL aliases, GUID/link/fingerprint fallback, bounded 2 MB responses, dangerous XML construct rejection and sanitized article HTML.
+- Cron scans due feeds every five minutes, assigns one-use queue tokens, and Queue consumers claim five-minute leases. Fetches send ETag/Last-Modified validators, adapt between five minutes and twelve hours, and back off failures up to one day.
+- Web behavior covers URL subscription, folders/custom titles, unsubscribe, paged all/unread/starred views, individual read/unread/star state and ingestion-ID mark-all-read watermarks.
+- `pnpm check`: TypeScript and 12 Workers-runtime tests passed, including two-account state isolation, global feed/item dedupe, authorization, CSRF, HTML discovery, Atom/RSS parsing, sanitizer behavior, conditional 304 requests, fetch lease concurrency and error backoff.
+- Browser QA passed against a seeded local D1 account on desktop and a 390×844 viewport. Opening an article changed its unread count from one to zero and rendered its sanitized body.

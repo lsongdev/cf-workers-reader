@@ -1,0 +1,85 @@
+import { now, randomToken } from './crypto';
+import { boundedText, discoverFeed, fetchPublic, parseFeed, publicFeedUrl, type ParsedFeed } from './feed-content';
+
+export interface Feed { id: number; url: string; title: string; site_url: string | null; etag: string | null; last_modified: string | null; fetch_interval: number; next_fetch_at: number; last_fetched_at: number | null; last_success_at: number | null; error_count: number; error: string | null; lease_token: string | null; fetching_until: number }
+
+async function storeItems(env: Env, id: number, parsed: ParsedFeed): Promise<number> {
+  let added = 0;
+  for (let offset = 0; offset < parsed.items.length; offset += 40) {
+    const results = await env.DB.batch(parsed.items.slice(offset, offset + 40).map(item =>
+      env.DB.prepare('INSERT INTO items(feed_id, guid, url, title, content, author, published_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(feed_id, guid) DO NOTHING')
+        .bind(id, item.guid, item.url, item.title, item.content, item.author, item.published_at)));
+    added += results.reduce((sum, r) => sum + r.meta.changes, 0);
+  }
+  return added;
+}
+
+export async function subscribe(env: Env, user: string, value: string, folder = ''): Promise<number> {
+  const submitted = publicFeedUrl(value.trim());
+  let found = await env.DB.prepare('SELECT feed_id AS id FROM feed_aliases WHERE url=?').bind(submitted).first<{ id: number }>();
+  if (!found) {
+    const discovered = await discoverFeed(submitted);
+    const created = await env.DB.prepare('INSERT INTO feeds(url, title, site_url) VALUES (?, ?, ?) ON CONFLICT(url) DO UPDATE SET url=excluded.url RETURNING id').bind(discovered.url, discovered.parsed.title, discovered.parsed.site_url).first<{ id: number }>();
+    if (!created) throw new Error('Could not create feed.');
+    found = created;
+    await env.DB.batch([...new Set(discovered.aliases)].map(url => env.DB.prepare('INSERT INTO feed_aliases(url, feed_id) VALUES (?, ?) ON CONFLICT(url) DO NOTHING').bind(url, found!.id)));
+    await storeItems(env, found.id, discovered.parsed);
+    await env.DB.prepare('UPDATE feeds SET etag=?, last_modified=?, last_fetched_at=?, last_success_at=?, next_fetch_at=? WHERE id=? AND last_fetched_at IS NULL')
+      .bind(discovered.response.headers.get('etag'), discovered.response.headers.get('last-modified'), now(), now(), now() + 1800, found.id).run();
+  }
+  await env.DB.prepare('INSERT INTO subscriptions(user_id, feed_id, folder) VALUES (?, ?, ?) ON CONFLICT(user_id, feed_id) DO NOTHING').bind(user, found.id, folder.slice(0, 100)).run();
+  return found.id;
+}
+
+export function nextInterval(interval: number, added: number): number {
+  return Math.round(Math.max(300, Math.min(43200, interval * (added ? 0.7 : 1.5))));
+}
+
+export async function refreshFeed(env: Env, id: number, queuedToken = ""): Promise<void> {
+  const token = randomToken();
+  const feed = await env.DB.prepare("UPDATE feeds SET lease_token=?, fetching_until=? WHERE id=? AND fetching_until<? AND ((?='' AND next_fetch_at<=?) OR queue_token=?) AND EXISTS(SELECT 1 FROM subscriptions WHERE feed_id=feeds.id) RETURNING *")
+    .bind(token, now() + 300, id, now(), queuedToken, now(), queuedToken).first<Feed>();
+  if (!feed) return;
+  try {
+    const headers: Record<string, string> = {};
+    if (feed.etag) headers['If-None-Match'] = feed.etag;
+    if (feed.last_modified) headers['If-Modified-Since'] = feed.last_modified;
+    const fetched = await fetchPublic(feed.url, headers);
+    let added = 0;
+    if (fetched.response.status !== 304) {
+      if (!fetched.response.ok) {
+        await fetched.response.body?.cancel();
+        throw new Error(`HTTP ${fetched.response.status}`);
+      }
+      const parsed = await parseFeed(await boundedText(fetched.response), fetched.url);
+      added = await storeItems(env, id, parsed);
+      await env.DB.prepare('UPDATE feeds SET title=?, site_url=?, etag=?, last_modified=? WHERE id=? AND lease_token=?')
+        .bind(parsed.title, parsed.site_url, fetched.response.headers.get('etag'), fetched.response.headers.get('last-modified'), id, token).run();
+      await env.DB.batch(fetched.aliases.map(url => env.DB.prepare('INSERT INTO feed_aliases(url, feed_id) VALUES (?, ?) ON CONFLICT(url) DO NOTHING').bind(url, id)));
+    }
+    const interval = nextInterval(feed.fetch_interval, added);
+    await env.DB.prepare('UPDATE feeds SET fetch_interval=?, next_fetch_at=?, last_fetched_at=?, last_success_at=?, error_count=0, error=NULL, fetching_until=0, lease_token=NULL, queue_token=NULL, queued_at=0 WHERE id=? AND lease_token=?')
+      .bind(interval, now() + interval, now(), now(), id, token).run();
+  } catch (error) {
+    const delay = Math.min(86400, 1800 * 2 ** Math.min(feed.error_count, 6));
+    // Never persist raw URLs or upstream response bodies in public error messages.
+    const message = error instanceof Error && /^HTTP \d{3}$/.test(error.message) ? error.message : 'Feed could not be fetched or parsed.';
+    await env.DB.prepare('UPDATE feeds SET next_fetch_at=?, last_fetched_at=?, error_count=error_count+1, error=?, fetching_until=0, lease_token=NULL, queue_token=NULL, queued_at=0 WHERE id=? AND lease_token=?')
+      .bind(now() + delay, now(), message, id, token).run();
+  }
+}
+
+export async function scheduleFeeds(env: Env): Promise<void> {
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM sessions WHERE expires_at<=?').bind(now()),
+    env.DB.prepare('DELETE FROM oidc_transactions WHERE expires_at<=?').bind(now()),
+  ]);
+  const due = await env.DB.prepare('SELECT id FROM feeds WHERE next_fetch_at<=? AND fetching_until<? AND queued_at<? AND EXISTS(SELECT 1 FROM subscriptions WHERE feed_id=feeds.id) ORDER BY next_fetch_at LIMIT 100').bind(now(), now(), now() - 600).all<{ id: number }>();
+  const messages: Array<{ body: { id: number; token: string } }> = [];
+  for (const feed of due.results) {
+    const token = randomToken();
+    const claimed = await env.DB.prepare('UPDATE feeds SET queue_token=?, queued_at=? WHERE id=? AND queued_at<? RETURNING id').bind(token, now(), feed.id, now() - 600).first();
+    if (claimed) messages.push({ body: { id: feed.id, token } });
+  }
+  if (messages.length) await env.FETCH_QUEUE.sendBatch(messages);
+}

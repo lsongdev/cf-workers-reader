@@ -1,10 +1,10 @@
+import { reader } from "./reader";
+import { scheduleFeeds, refreshFeed } from "./feeds";
 import { Hono, type Context, type Next } from "hono";
 import { secureHeaders } from "hono/secure-headers";
-import { createSession, csrfToken, currentUser, revokeSession, validCsrf } from "./auth";
+import { createSession, currentUser } from "./auth";
 import { sha256 } from "./crypto";
 import { beginOidcLogin, completeOidcLogin } from "./oidc";
-import { HomePage } from "./views/home";
-import { LandingPage } from "./views/landing";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -22,8 +22,8 @@ app.use("*", secureHeaders({
 }));
 
 app.use("*", async (context, next) => {
-  context.header("Cache-Control", "no-store");
   await next();
+  if (context.req.path.startsWith("/api/") || context.req.path.startsWith("/login")) context.header("Cache-Control", "no-store");
 });
 
 app.use("/login*", loginRateLimit);
@@ -32,11 +32,8 @@ app.get("/health", (context) =>
   context.json({ status: "ok", service: "reader" }),
 );
 
-app.get("/", async (context) => {
-  const user = await currentUser(context);
-  if (!user) return context.html(<LandingPage name={context.env.APP_NAME} />);
-  return context.html(<HomePage name={context.env.APP_NAME} user={user} csrf={await csrfToken(context)} />);
-});
+app.get("/", (context) => asset(context, "/index.html"));
+app.get("/settings", (context) => asset(context, "/index.html"));
 
 app.get("/login", async (context) => {
   if (await currentUser(context)) return context.redirect("/");
@@ -47,7 +44,7 @@ app.get("/login/callback", async (context) => {
   const code = context.req.query("code");
   const state = context.req.query("state");
   if (!code || !state || context.req.query("error")) {
-    return context.html(<LandingPage name={context.env.APP_NAME} error="Sign-in was cancelled or returned an invalid response." />, 400);
+    return context.redirect("/?error=signin", 302);
   }
   try {
     const result = await completeOidcLogin(context, code, state);
@@ -55,22 +52,13 @@ app.get("/login/callback", async (context) => {
     return context.redirect(result.returnTo);
   } catch (error) {
     console.error(JSON.stringify({ event: "oidc_login_failed", message: error instanceof Error ? error.message : "unknown" }));
-    return context.html(<LandingPage name={context.env.APP_NAME} error="Sign-in could not be completed. Please try again." />, 401);
+    return context.redirect("/?error=signin", 302);
   }
 });
 
-app.post("/logout", async (context) => {
-  const body = await formValues(context.req.raw);
-  if (!(await validCsrf(context, body.csrf_token))) {
-    const user = await currentUser(context);
-    if (!user) return context.html(<LandingPage name={context.env.APP_NAME} error="The form expired." />, 403);
-    return context.html(<HomePage name={context.env.APP_NAME} user={user} csrf={await csrfToken(context)} error="The form expired." />, 403);
-  }
-  await revokeSession(context);
-  return context.redirect("/");
-});
+app.route("/api", reader);
 
-app.notFound((context) => context.text("Not Found", 404));
+app.notFound(async (context) => cloneResponse(await context.env.ASSETS.fetch(context.req.raw)));
 
 app.onError(async (error, context) => {
   console.error(JSON.stringify({ event: "request_error", path: context.req.path, message: error.message }));
@@ -84,7 +72,7 @@ async function loginRateLimit(context: Context<{ Bindings: Env }>, next: Next) {
     const result = await context.env.AUTH_RATE_LIMITER.limit({ key });
     if (!result.success) {
       context.header("Retry-After", "60");
-      return context.html(<LandingPage name={context.env.APP_NAME} error="Too many sign-in attempts. Try again shortly." />, 429);
+      return context.json({ error: "Too many sign-in attempts. Try again shortly." }, 429);
     }
   } catch (error) {
     console.error(JSON.stringify({ event: "rate_limit_error", path: context.req.path, message: error instanceof Error ? error.message : "unknown" }));
@@ -92,15 +80,19 @@ async function loginRateLimit(context: Context<{ Bindings: Env }>, next: Next) {
   return next();
 }
 
-async function formValues(request: Request): Promise<Record<string, string>> {
-  const data = await request.formData();
-  const values: Record<string, string> = {};
-  data.forEach((value, key) => {
-    if (typeof value === "string") values[key] = value;
-  });
-  return values;
+function cloneResponse(response: Response): Response { return new Response(response.body, response); }
+
+async function asset(context: Context<{ Bindings: Env }>, path: string): Promise<Response> {
+  return cloneResponse(await context.env.ASSETS.fetch(new Request(new URL(path, context.req.url), context.req.raw)));
 }
 
 export default {
   fetch: app.fetch,
-} satisfies ExportedHandler<Env>;
+  async scheduled(_event, env) { await scheduleFeeds(env); },
+  async queue(batch, env) {
+    for (const message of batch.messages) {
+      await refreshFeed(env, message.body.id, message.body.token);
+      message.ack();
+    }
+  },
+} satisfies ExportedHandler<Env, { id: number; token: string }>;
