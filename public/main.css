@@ -1061,10 +1061,6 @@ main {
     border-top: 1px solid var(--line)
   }
 
-  .view, .reading-view {
-    width: calc(100% - 28px)
-  }
-
   .view {
     padding-top: 26px
   }
