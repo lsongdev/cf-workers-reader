@@ -36,7 +36,7 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "reader-db",
+      "database_name": "reader",
       "database_id": "387f83ed-954c-473f-b1a7-cc8146fe8109",
       "migrations_dir": "migrations"
     }
