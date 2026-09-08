@@ -158,11 +158,6 @@ main {
 
 .eyebrow {
   color: var(--accent);
-  font-size: 11px;
-  font-weight: 750;
-  text-transform: uppercase;
-  letter-spacing: .16em;
-  margin: 0 0 9px
 }
 
 .back-link {
@@ -171,7 +166,7 @@ main {
   color: var(--muted);
   font-size: 13px;
   font-weight: 650;
-  text-decoration: none
+  text-decoration: none;
 }
 
 .back-link:hover {
@@ -192,11 +187,6 @@ main {
 
 .notice {
   color: var(--accent)
-}
-
-.muted {
-  color: var(--muted);
-  font-size: 13px
 }
 
 .optional {
@@ -1009,10 +999,6 @@ main {
   font-size: 14px
 }
 
-.settings {
-  max-width: 760px
-}
-
 .settings code {
   overflow-wrap: anywhere
 }
@@ -1061,10 +1047,6 @@ main {
 }
 
 @media(max-width:560px) {
-  .navbar {
-    width: calc(100% - 2rem);
-    gap: 8px
-  }
 
   .account-nav {
     margin-left: auto
